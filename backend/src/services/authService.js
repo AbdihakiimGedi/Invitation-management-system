@@ -1,0 +1,46 @@
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const UserModel = require('../models/userModel');
+
+const AuthService = {
+  async login(username, password) {
+    // 1. Find user by username
+    const user = await UserModel.findByUsername(username);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // 2. Check if user is active
+    if (!user.is_active) {
+      throw new Error('Account inactive');
+    }
+
+    // 3. Verify password using hash comparison
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    if (!isPasswordValid) {
+      throw new Error('Invalid username or password');
+    }
+
+    // 4. Generate JWT token
+    const tokenPayload = {
+      id: user.id,
+      role: user.role,
+    };
+
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN,
+    });
+
+    // 5. Return user info (safe data only) and token
+    const safeUser = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      created_at: user.created_at,
+    };
+
+    return { user: safeUser, token };
+  }
+};
+
+module.exports = AuthService;
