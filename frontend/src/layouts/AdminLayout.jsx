@@ -23,7 +23,7 @@ const AdminLayout = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-blue-100 dark:bg-blue-950 flex font-sans transition-colors duration-500 overflow-x-hidden">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex font-sans transition-colors duration-500 overflow-x-hidden selection:bg-primary-100 selection:text-primary-900">
       <AdminSidebar 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
@@ -32,7 +32,7 @@ const AdminLayout = ({ children }) => {
         onOpenAssignPeople={() => setIsAssignModalOpen(true)}
       />
 
-      <main className="flex-1 lg:ml-72 transition-all duration-500">
+      <main className="flex-1 lg:ml-72 transition-all duration-500 relative">
         {React.Children.map(children, child => {
           if (React.isValidElement(child)) {
             return React.cloneElement(child, { user, setIsSidebarOpen });

@@ -1,15 +1,15 @@
 const db = require('../config/database');
- 
+
 const GPA_MAPPING = [
   { label: 'A+', min: 4.00, max: 4.00 },
-  { label: 'A',  min: 3.67, max: 3.99 },
+  { label: 'A', min: 3.67, max: 3.99 },
   { label: 'A-', min: 3.33, max: 3.66 },
   { label: 'B+', min: 3.00, max: 3.32 },
-  { label: 'B',  min: 2.67, max: 2.99 },
+  { label: 'B', min: 2.67, max: 2.99 },
   { label: 'B-', min: 2.33, max: 2.66 },
   { label: 'C+', min: 2.00, max: 2.32 },
-  { label: 'C',  min: 1.67, max: 1.99 },
-  { label: 'F',  min: 0.00, max: 1.66 }
+  { label: 'C', min: 1.67, max: 1.99 },
+  { label: 'F', min: 0.00, max: 1.66 }
 ];
 
 const SeatModel = {
@@ -123,7 +123,7 @@ const SeatModel = {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       if (participantIds.length > 0) {
         // 1. Remove existing assignments for these participants in this event
         await client.query(
@@ -153,13 +153,13 @@ const SeatModel = {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       // Resolve bounds for the selected GPA groups
       const selectedBounds = GPA_MAPPING.filter(m => gpaGroups.includes(m.label));
-      
+
       if (selectedBounds.length === 0) {
-          await client.query('ROLLBACK');
-          return { success: true, count: 0 };
+        await client.query('ROLLBACK');
+        return { success: true, count: 0 };
       }
 
       // Build a query with dynamic OR conditions for GPA ranges
@@ -179,7 +179,7 @@ const SeatModel = {
           AND ep.type_id IN (SELECT id FROM people_types WHERE type_name = 'Graduates')
           AND (${conditions})
       `;
-      
+
       const participantsRes = await client.query(findParticipantsQuery, findParams);
       const epIds = participantsRes.rows.map(r => r.eventparticipant_id);
 
@@ -290,7 +290,7 @@ const SeatModel = {
       WHERE sg.event_id = $1
       ORDER BY sg.id, full_name
     `;
-    
+
     const res = await db.query(query, [eventId]);
     const groupsMap = {};
     res.rows.forEach(row => {
@@ -310,6 +310,54 @@ const SeatModel = {
       });
     });
     return Object.values(groupsMap);
+  },
+
+  async createManualSeats(eventId, groups) {
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Clear any existing seating for this event to avoid duplicates
+      await client.query('DELETE FROM seat_assignments WHERE event_id = $1', [eventId]);
+      await client.query('DELETE FROM seats WHERE event_id = $1', [eventId]);
+      await client.query('DELETE FROM seat_groups WHERE event_id = $1', [eventId]);
+
+      const createdGroups = [];
+      let totalSeatsCreated = 0;
+
+      for (const g of groups) {
+        // 2. Create the Seat Group
+        const groupRes = await client.query(
+          'INSERT INTO seat_groups (event_id, name, target_type, description) VALUES ($1, $2, $3, $4) RETURNING id, name, target_type',
+          [eventId, g.name, g.target_type || 'Both', g.description || '']
+        );
+        const group = groupRes.rows[0];
+        createdGroups.push(group);
+
+        // 3. Create individual Seat records based on quantity
+        const quantity = parseInt(g.quantity || 0);
+        for (let i = 1; i <= quantity; i++) {
+          await client.query(
+            'INSERT INTO seats (event_id, zone, seat_number, category_type, status) VALUES ($1, $2, $3, $4, $5)',
+            [eventId, group.name, `S-${i}`, group.target_type === 'Student' ? 'Graduate' : (group.target_type === 'Guest' ? 'Guest' : 'VIP'), 'Available']
+          );
+          totalSeatsCreated++;
+        }
+      }
+
+      await client.query('COMMIT');
+      return { 
+        success: true, 
+        message: `Successfully created ${createdGroups.length} zones and ${totalSeatsCreated} individual seats.`,
+        groups: createdGroups,
+        totalSeats: totalSeatsCreated
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 };
 

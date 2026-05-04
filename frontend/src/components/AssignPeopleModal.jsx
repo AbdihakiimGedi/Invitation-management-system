@@ -121,6 +121,7 @@ const AssignPeopleModal = ({ isOpen, onClose, onAssign, event }) => {
             </div>
           </div>
 
+
           <div className="space-y-3">
             {filteredPeople.map(person => (
               <div 

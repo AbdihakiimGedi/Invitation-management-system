@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import AlertModal from './AlertModal';
 import ConfirmModal from './ConfirmModal';
 import { peopleService, eventModelService } from '../services/api';
+import seatService from '../services/seatService';
+import SeatDefinitionForm from './SeatDefinitionForm';
 
 const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
   const [step, setStep] = useState(1);
@@ -31,6 +33,10 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredData, setFilteredData] = useState(null);
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, type: 'primary', title: '', message: '', onConfirm: null });
+  const [showSeatForm, setShowSeatForm] = useState(false);
+
+  // Seating States
+  const [seatingStatus, setSeatingStatus] = useState({ checked: false, initialized: false });
 
   const navigate = useNavigate();
 
@@ -60,8 +66,38 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
       setMapping({});
       setImportedStudents([]);
       setExclusions([]);
+      setSeatingStatus({ checked: false, initialized: false });
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (selectedEventId) {
+      checkSeating();
+    }
+  }, [selectedEventId]);
+
+  const checkSeating = async () => {
+    try {
+      const groups = await seatService.getGroups(selectedEventId);
+      setSeatingStatus({ checked: true, initialized: groups.length > 0 });
+    } catch (error) {
+      setSeatingStatus({ checked: true, initialized: false });
+    }
+  };
+
+  const handleInitializeSeating = async (groups) => {
+    setLoading(true);
+    try {
+      await seatService.initializeSeats(selectedEventId, groups);
+      showAlert('success', 'Seating architecture finalized successfully.');
+      setSeatingStatus({ checked: true, initialized: true });
+      setShowSeatForm(false);
+    } catch (error) {
+      showAlert('error', error.message || 'Failed to initialize seating.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const showAlert = (type, message) => {
     setAlertConfig({ isOpen: true, type, message });
@@ -111,6 +147,12 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
       showAlert('error', 'Selection required to continue.');
       return;
     }
+
+    if (!seatingStatus.initialized) {
+      showAlert('error', 'Seating must be initialized for this event before assigning participants.');
+      return;
+    }
+
     const type = peopleTypes.find(t => t.id === selectedTypeId);
     setLoading(true);
     try {
@@ -142,7 +184,12 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
       const initialMapping = {};
       data.headers.forEach(h => {
         const normalised = h.trim().toLowerCase().replace(/\s+/g, '_');
-        const schemaMatch = schemaFields.find(f => f.column.toLowerCase() === normalised);
+        const schemaMatch = schemaFields.find(f => {
+          const colName = f.column.toLowerCase();
+          return colName === normalised || 
+                 colName === 'has_' + normalised || 
+                 normalised === 'has_' + colName;
+        });
         if (schemaMatch) initialMapping[h] = schemaMatch.column;
       });
       setMapping(initialMapping);
@@ -189,6 +236,15 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
           full_name: row[nameKey]
         }));
         
+        // AUTO-EXCLUSION INTEGRATION
+        const autoExclusions = result.data
+          .filter(row => row.is_auto_excluded)
+          .map(row => ({
+            student_id: row[studentIdKey],
+            reason: row.exclusion_reason
+          }));
+
+        setExclusions(autoExclusions);
         setImportedStudents(normalized);
         setImportSummary(result);
         setStep(4);
@@ -334,6 +390,38 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
                   <option value="">Select operational ceremony...</option>
                   {events.map(ev => <option key={ev.id} value={ev.id}>{ev.event_name}</option>)}
                 </select>
+
+                {selectedEventId && seatingStatus.checked && (
+                  <div className={`mt-4 p-5 rounded-2xl border transition-all duration-500 ${
+                    seatingStatus.initialized 
+                      ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30' 
+                      : 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30'
+                  }`}>
+                    {showSeatForm ? (
+                      <SeatDefinitionForm 
+                        onSave={handleInitializeSeating}
+                        onCancel={() => setShowSeatForm(false)}
+                        isProcessing={loading}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-2 h-2 rounded-full ${seatingStatus.initialized ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'}`}></div>
+                          <span className={`text-[0.65rem] font-black uppercase tracking-widest ${seatingStatus.initialized ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            Seating Architecture: {seatingStatus.initialized ? 'Initialized' : 'Pending Configuration'}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={() => setShowSeatForm(true)}
+                          disabled={loading}
+                          className="px-4 py-2 bg-amber-600 text-white text-[0.6rem] font-black uppercase tracking-widest rounded-xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-600/20 active:scale-95 disabled:opacity-50"
+                        >
+                          {seatingStatus.initialized ? 'Modify Architecture' : 'Define Seats Now'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               
               <div className="space-y-2">

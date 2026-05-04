@@ -17,7 +17,7 @@ import InvitationScanner from './pages/InvitationScanner';
 function App() {
   return (
     <Router>
-      <div className="min-h-screen transition-colors duration-500 bg-blue-100 dark:bg-blue-950 text-gray-900 dark:text-gray-100">
+      <div className="min-h-screen transition-colors duration-500 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-primary-100 selection:text-primary-900">
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />

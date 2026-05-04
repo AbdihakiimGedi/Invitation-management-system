@@ -38,108 +38,122 @@ const GuestDashboard = () => {
 
   if (loading) return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center font-sans">
-      <div className="flex flex-col items-center space-y-4">
-        <div className="w-10 h-10 border-4 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Verifying Access</span>
+      <div className="flex flex-col items-center space-y-6">
+        <div className="w-12 h-12 border-[3px] border-primary-600 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] animate-pulse italic">Synchronizing Registry...</span>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans transition-colors duration-500">
-      {/* Top Bar */}
-      <header className="bg-white dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 h-20 px-8 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
-        <div className="flex items-center space-x-3">
-          <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary-600/20">
-             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans transition-all duration-700 selection:bg-primary-500/30">
+      {/* TOP NAVIGATION */}
+      <header className="bg-white/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 h-24 px-8 md:px-12 flex items-center justify-between sticky top-0 z-30 backdrop-blur-xl">
+        <div className="flex items-center space-x-4">
+          <div className="w-11 h-11 bg-slate-900 dark:bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-primary-600/20">
+             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
              </svg>
           </div>
-          <h1 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-            Guest <span className="text-slate-400 font-medium">Entrance</span>
-          </h1>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">
+              Guest <span className="text-primary-600 italic">Access</span>
+            </h1>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Verified Portal</p>
+          </div>
         </div>
         
-        <div className="flex items-center space-x-6">
-          <span className="hidden sm:inline-block text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-100 dark:border-slate-700">
-             Public Session
-          </span>
+        <div className="flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-3">
+             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Live Session Secured</span>
+          </div>
           <button 
             onClick={handleLogout}
-            className="px-6 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 font-bold text-xs uppercase tracking-widest hover:opacity-90 transition-all active:scale-95"
+            className="px-8 py-3.5 rounded-2xl bg-rose-50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400 font-black text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all active:scale-95 border border-rose-100 dark:border-rose-900/20"
           >
-            End Session
+            End Protocol
           </button>
         </div>
       </header>
 
-      <main className="flex-1 p-6 md:p-12 max-w-4xl mx-auto w-full">
-        <div className="text-center mb-12 sm:mb-16">
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Welcome, <span className="text-primary-600">Visitor</span>
+      <main className="flex-1 p-8 md:p-20 max-w-5xl mx-auto w-full relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+        <div className="text-center mb-20">
+          <h2 className="text-4xl sm:text-5xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-tight mb-4">
+            Honored <span className="text-primary-600 italic">Visitor</span>
           </h2>
-          <p className="text-[0.65rem] font-bold text-slate-400 uppercase tracking-widest mt-2 flex items-center justify-center space-x-2">
-            <span>Access Authorization</span>
-            <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-            <span className="text-primary-600">Ref: G-{user?.username?.substring(0, 8).toUpperCase()}</span>
-          </p>
+          <div className="flex items-center justify-center space-x-4">
+            <div className="h-px w-8 bg-slate-200 dark:border-slate-800"></div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] italic leading-relaxed">
+              Credential Manifest Index: <span className="text-slate-900 dark:text-slate-200 ml-2">G-{user?.username?.substring(0, 8).toUpperCase()}</span>
+            </p>
+            <div className="h-px w-8 bg-slate-200 dark:border-slate-800"></div>
+          </div>
         </div>
 
         {invitations.length > 0 ? (
-          <div className="card-modern p-10 md:p-16 flex flex-col items-center bg-white/80 dark:bg-slate-900 shadow-2xl">
+          <div className="group rounded-[4rem] p-12 md:p-20 flex flex-col items-center bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-premium hover:shadow-premium-hover transition-all duration-700 relative overflow-hidden">
+            {/* Background Glow */}
+            <div className="absolute -top-[20%] -right-[10%] w-[50%] h-[50%] bg-primary-600/5 rounded-full blur-[100px] pointer-events-none group-hover:bg-primary-600/10 transition-colors duration-700"></div>
+            
             {/* QR Content Area */}
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-10 rounded-[2.5rem] mb-12 w-full max-w-sm border border-slate-100 dark:border-slate-800 flex items-center justify-center shadow-inner relative group">
+            <div className="relative z-10 bg-slate-50 dark:bg-slate-950 p-12 md:p-16 rounded-[3.5rem] mb-16 w-full max-w-sm border-2 border-slate-100 dark:border-slate-800/50 flex items-center justify-center shadow-inner group-hover:border-primary-500/20 transition-all duration-700 overflow-hidden">
+              <div className="absolute inset-x-0 h-[2px] bg-primary-500/20 -top-10 group-hover:animate-scanline pointer-events-none"></div>
+              
               {invitations[0].qr_code ? (
                 <img 
                   src={invitations[0].qr_code} 
                   alt="Guest QR Code" 
-                  className="w-full contrast-125 dark:invert dark:brightness-125 group-hover:scale-105 transition-transform duration-500" 
+                  className="w-full contrast-125 dark:invert dark:brightness-200 group-hover:scale-105 transition-transform duration-700 ease-out" 
                 />
               ) : (
-                <div className="text-center text-slate-300 dark:text-slate-600 p-10 space-y-4">
-                   <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 17h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                <div className="text-center text-slate-300 dark:text-slate-700 p-12 space-y-6 opacity-40">
+                   <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 17h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                    </svg>
-                   <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] leading-relaxed">
-                     Credential<br/>Manifested
+                   <p className="text-[10px] font-black uppercase tracking-[0.4em] leading-relaxed italic">
+                     Digital Key<br/>Synchronized
                    </p>
                 </div>
               )}
             </div>
 
             {/* Allocation Grid */}
-            <div className="grid grid-cols-2 gap-4 w-full max-w-md mb-12">
-              <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl text-center border border-slate-100 dark:border-slate-700">
-                <p className="text-[0.6rem] text-slate-400 font-bold uppercase tracking-widest mb-1.5">Designated Row</p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{invitations[0].row_number || 'Main'}</p>
+            <div className="relative z-10 grid grid-cols-2 gap-8 w-full max-w-md mb-16">
+              <div className="p-8 bg-slate-50 dark:bg-slate-800/40 rounded-[2.5rem] text-center border border-slate-100 dark:border-slate-800 transition-colors group-hover:bg-white dark:group-hover:bg-slate-800 shadow-sm">
+                <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.3em] mb-3 italic">Sector Allocation</p>
+                <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">{invitations[0].row_number || 'MAIN'}</p>
               </div>
-              <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl text-center border border-slate-100 dark:border-slate-700">
-                <p className="text-[0.6rem] text-slate-400 font-bold uppercase tracking-widest mb-1.5">Seat Position</p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{invitations[0].seat_number || 'General'}</p>
+              <div className="p-8 bg-slate-50 dark:bg-slate-800/40 rounded-[2.5rem] text-center border border-slate-100 dark:border-slate-800 transition-colors group-hover:bg-white dark:group-hover:bg-slate-800 shadow-sm">
+                <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.3em] mb-3 italic">Grid Position</p>
+                <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase leading-none">{invitations[0].seat_number || 'OPEN'}</p>
               </div>
             </div>
 
-            <button className="w-full max-w-md btn-primary py-5 text-sm shadow-primary-600/25 active:scale-[0.98] transition-all">
-              Download Guest Manifest (PDF)
+            <button className="relative z-10 w-full max-w-md py-6 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-black text-[11px] uppercase tracking-[0.3em] shadow-2xl shadow-slate-900/10 hover:bg-primary-600 hover:text-white dark:hover:bg-primary-600 transition-all active:scale-95 flex items-center justify-center space-x-4">
+               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+               </svg>
+               <span>Extract Security PDF</span>
             </button>
           </div>
         ) : (
-          <div className="card-modern border-dashed p-20 text-center bg-white/50 backdrop-blur-sm">
-            <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-               <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="rounded-[4rem] border-4 border-dashed border-slate-100 dark:border-slate-800 p-24 text-center bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl animate-in zoom-in-95 duration-700">
+            <div className="w-20 h-20 bg-rose-50 dark:bg-rose-950/20 text-rose-600 rounded-[2rem] flex items-center justify-center mx-auto mb-10 shadow-xl shadow-rose-600/5">
+               <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                </svg>
             </div>
-            <h3 className="text-slate-900 dark:text-white font-bold tracking-tight">Registry Mismatch</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-              We could not locate an active invitation for this session. Please verify your credentials with the event administrator.
+            <h3 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase mb-3">Synchronization Error</h3>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mt-4 max-w-xs mx-auto leading-relaxed opacity-60 italic">
+              Registry Mismatch: No active security manifest detected for this session. Please consult the administrative protocol.
             </p>
           </div>
         )}
 
-        <div className="mt-16 text-center">
-          <p className="text-slate-400 text-[0.6rem] font-bold uppercase tracking-[0.25em]">
-            Digital Ceremony Management System • v1.0
+        <div className="mt-24 text-center opacity-30">
+          <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.5em] italic">
+            Autonomous Invitation Architecture • Deployment v7.4
           </p>
         </div>
       </main>

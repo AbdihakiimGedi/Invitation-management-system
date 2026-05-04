@@ -2,6 +2,8 @@ const db = require('../config/database');
 const fs = require('fs');
 const xlsx = require('xlsx');
 const EventModel = require('../models/eventModel');
+const InvitationService = require('./invitationService');
+const InvitationEmailService = require('./invitationEmailService');
 
 const PeopleService = {
   /**
@@ -85,7 +87,55 @@ const PeopleService = {
       lookupKeyCache[refTable] = nameColResult.rows[0]?.column_name || null;
     }
 
-    // 4. Build the final structured schema
+    // 4. Dynamic Extension Discovery (1:1 Relationships / Status Tables)
+    // Find tables that reference this table where the FK is also their PK
+    const extensionsRes = await db.query(`
+      SELECT 
+          referring_kcu.table_name AS extension_table,
+          referring_kcu.column_name AS extension_column
+      FROM 
+          information_schema.table_constraints AS referring_tc
+      JOIN 
+          information_schema.key_column_usage AS referring_kcu
+          ON referring_tc.constraint_name = referring_kcu.constraint_name
+      JOIN 
+          information_schema.constraint_column_usage AS target_ccu
+          ON target_ccu.constraint_name = referring_tc.constraint_name
+      JOIN 
+          information_schema.table_constraints AS pk_tc
+          ON pk_tc.table_name = referring_kcu.table_name 
+          AND pk_tc.constraint_type = 'PRIMARY KEY'
+      JOIN 
+          information_schema.key_column_usage AS pk_kcu
+          ON pk_kcu.constraint_name = pk_tc.constraint_name 
+          AND pk_kcu.column_name = referring_kcu.column_name
+      WHERE 
+          referring_tc.constraint_type = 'FOREIGN KEY'
+          AND LOWER(target_ccu.table_name) = $1
+    `, [key]);
+
+    const extensionColumns = [];
+    for (const ext of extensionsRes.rows) {
+      const extColResult = await db.query(`
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE LOWER(table_name) = LOWER($1)
+          AND table_schema = 'public'
+          AND column_name NOT IN ('created_at', 'updated_at', $2)
+        ORDER BY ordinal_position
+      `, [ext.extension_table, ext.extension_column]);
+      
+      extColResult.rows.forEach(col => {
+        extensionColumns.push({
+          column:   col.column_name,
+          type:     'direct',
+          label:    col.column_name.replace(/^has_/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          required: false // Extensions are typically optional
+        });
+      });
+    }
+
+    // 5. Build the final structured schema
     let schema = colResult.rows.map(col => {
       const isRequired = col.is_nullable === 'NO';
       const fk = fkMap[col.column_name];
@@ -107,6 +157,9 @@ const PeopleService = {
         required: isRequired
       };
     });
+
+    // Append dynamic extension columns
+    schema = [...schema, ...extensionColumns];
 
     // Fallback/Override for Residents of the "Guests" table if dynamic fetch is incomplete
     if (key === 'guests' && schema.length > 0) {
@@ -342,6 +395,22 @@ const PeopleService = {
         const fId = fName ? facultyCache[fName.toLowerCase()] : null;
         const dId = (dName && fId) ? departmentCache[`${dName.toLowerCase()}|${fId}`] : null;
 
+        // --- AUTO-EXCLUSION DETECTION ---
+        const financeIssue = getVal(row, 'has_finance_issue');
+        const examIssue = getVal(row, 'has_exam_issue');
+        
+        // Helper to normalize truthy values from Excel (True, 1, Yes, etc.)
+        const isTrue = (val) => {
+          if (!val) return false;
+          const s = String(val).toLowerCase().trim();
+          return s === 'true' || s === '1' || s === 'yes' || s === 'y' || s === 't';
+        };
+
+        const hasFinance = isTrue(financeIssue);
+        const hasExam = isTrue(examIssue);
+        const isRejected = hasFinance || hasExam;
+        const rejectionReason = hasFinance ? 'Finance issue' : (hasExam ? 'Exam issue' : null);
+
         // --- STUDENT UPSERT ---
         const studentRes = await client.query(`
           INSERT INTO students (student_id, full_name, department_id, faculty_id, phone, email, gpa)
@@ -359,24 +428,44 @@ const PeopleService = {
 
         if (studentRes.rows[0].is_new) {
           summary.insertedStudents++;
-          await client.query('INSERT INTO student_status (student_id) VALUES ($1) ON CONFLICT DO NOTHING', [studentId]);
         } else {
           summary.skippedDuplicates++;
         }
+
+        // --- STUDENT STATUS UPDATE (AUTO-EXCLUSION) ---
+        await client.query(`
+          INSERT INTO student_status (student_id, has_finance_issue, has_exam_issue)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (student_id) 
+          DO UPDATE SET 
+            has_finance_issue = EXCLUDED.has_finance_issue,
+            has_exam_issue = EXCLUDED.has_exam_issue
+        `, [studentId, hasFinance, hasExam]);
 
         // --- PASS 4: Strict Event Participation Duplicate & Capacity Prevention ---
         if (eventId && graduateTypeId) {
           if (idsSet.has(studentId)) {
             summary.alreadyInEvent++;
+            
+            // Even if already in event, update status if newly detected as rejected
+            if (isRejected) {
+              await client.query(`
+                UPDATE event_participants 
+                SET status = 'rejected', reason = $1
+                WHERE event_id = $2 AND user_id = $3
+              `, [rejectionReason, eventId, studentId]);
+            }
           } else {
             // CAPACITY CHECK: Check if we have slots left
             if (summary.addedToEvent < remaining) {
+              const status = isRejected ? 'rejected' : 'eligible';
+              
               await client.query(`
-                INSERT INTO event_participants (event_id, user_id, type_id, status)
-                VALUES ($1, $2, $3, 'eligible')
+                INSERT INTO event_participants (event_id, user_id, type_id, status, reason)
+                VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (event_id, user_id) 
-                DO UPDATE SET status = EXCLUDED.status
-              `, [eventId, studentId, graduateTypeId]);
+                DO UPDATE SET status = EXCLUDED.status, reason = EXCLUDED.reason
+              `, [eventId, studentId, graduateTypeId, status, rejectionReason]);
               
               summary.addedToEvent++;
               idsSet.add(studentId);
@@ -385,6 +474,10 @@ const PeopleService = {
             }
           }
         }
+
+        // Attach status to the row object for frontend pre-population
+        row.is_auto_excluded = isRejected;
+        row.exclusion_reason = rejectionReason;
       }
 
       summary.remainingCapacity = Math.max(0, remaining - summary.addedToEvent);
@@ -475,6 +568,22 @@ const PeopleService = {
       }
 
       await client.query('COMMIT');
+
+      // --- NEW: Automatic Invitation Generation (Blocking) ---
+      try {
+        await InvitationService.autoGenerateForEvent(eventId);
+        
+        // --- NEW: Automatic Email Dispatch (Non-Blocking / Background) ---
+        // We trigger this in the background so the UI doesn't wait for SMTP response
+        setImmediate(() => {
+          InvitationEmailService.sendInvitations(eventId).catch(err => {
+            console.error('[INVITATION-BG] Background email dispatch failed:', err);
+          });
+        });
+      } catch (invErr) {
+        console.error('[INVITATION] Automatic invitation generation failed:', invErr);
+      }
+
       return { success: true };
     } catch (err) {
       await client.query('ROLLBACK');
@@ -498,7 +607,24 @@ const PeopleService = {
         'SELECT status FROM event_participants WHERE event_id = $1 AND user_id = $2',
         [eventId, userId]
       );
-      
+
+      // --- NEW: Capacity Check if we are re-including ---
+      if (isParticipating) {
+        const capacityRes = await client.query(`
+          SELECT 
+            e.max_capacity,
+            (SELECT COUNT(*) FROM event_participants WHERE event_id = $1 AND status = 'eligible') as current_count
+          FROM events e
+          WHERE e.id = $1
+        `, [eventId]);
+        
+        const eventData = capacityRes.rows[0];
+        if (eventData && eventData.max_capacity && parseInt(eventData.current_count) >= eventData.max_capacity) {
+           throw new Error("Event is already full. No more invitations can be generated.");
+        }
+      }
+
+      let action = 'none';
       if (existsRes.rowCount > 0) {
         // Step 2: If Exists -> UPDATE
         const newStatus = isParticipating ? 'eligible' : 'rejected';
@@ -507,9 +633,7 @@ const PeopleService = {
           SET is_participating = $1, status = $2, reason = $3
           WHERE user_id = $4 AND event_id = $5
         `, [isParticipating, newStatus, isParticipating ? null : 'Excluded by Admin', userId, eventId]);
-        
-        await client.query('COMMIT');
-        return { success: true, action: 'updated' };
+        action = 'updated';
       } else {
         // Step 3: If Not Exists -> Insert new record
         let finalTypeId = typeId;
@@ -525,10 +649,29 @@ const PeopleService = {
           INSERT INTO event_participants (event_id, user_id, type_id, status, is_participating, reason)
           VALUES ($1, $2, $3, $4, $5, $6)
         `, [eventId, userId, finalTypeId, status, isParticipating, isParticipating ? null : 'Excluded by Admin']);
-        
-        await client.query('COMMIT');
-        return { success: true, action: 'inserted' };
+        action = 'inserted';
       }
+      
+      await client.query('COMMIT');
+
+      // --- NEW: Post-Inclusion Automation Trigger ---
+      if (isParticipating) {
+        try {
+          // 1. Generate invitation (checks for duplicates automatically)
+          await InvitationService.autoGenerateForEvent(eventId);
+          
+          // 2. Dispatch email in background
+          setImmediate(() => {
+            InvitationEmailService.sendInvitations(eventId).catch(err => {
+              console.error('[RE-INCLUDE-BG] Email dispatch failed:', err);
+            });
+          });
+        } catch (invErr) {
+          console.error('[RE-INCLUDE] Post-inclusion automation failed:', invErr);
+        }
+      }
+
+      return { success: true, action };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;

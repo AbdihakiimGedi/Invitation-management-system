@@ -22,9 +22,10 @@ function createTransporter() {
 }
 
 /**
- * Generates the invitation email HTML body.
+ * Generates the invitation e
+ * mail HTML body.
  */
-function buildEmailHTML({ fullName, eventName, groupName, qrTokens, qty, eventLocation, eventDate, eventTime }) {
+function buildEmailHTML({ fullName, eventName, groupName, qrTokens, qty, eventLocation, eventDate, eventTime, seatNumber }) {
   const tokens = Array.isArray(qrTokens) ? qrTokens : (qrTokens ? [qrTokens] : []);
 
   const qrSectionsHtml = tokens.map((token, idx) => `
@@ -74,6 +75,7 @@ function buildEmailHTML({ fullName, eventName, groupName, qrTokens, qty, eventLo
             <p>📅 <strong>Date:</strong> ${eventDate}</p>
             <p>⏰ <strong>Time:</strong> ${eventTime}</p>
             <p>🪑 <strong>Seat Group:</strong> ${groupName}</p>
+            <p>🎟 <strong>Seat Number:</strong> <span style="font-size: 18px; color: #1a1a2e;">${seatNumber || 'Unassigned'}</span></p>
             ${qty > 1 ? `<p>🎟 <strong>Tickets:</strong> ${qty} individual entry QR codes below</p>` : ''}
           </div>
 
@@ -138,6 +140,7 @@ const CommunicationService = {
           eventLocation: data.eventLocation || 'TBD',
           eventDate: data.eventDate || 'TBD',
           eventTime: data.eventTime || 'TBD',
+          seatNumber: data.seatNumber || 'TBD',
         }),
         attachments,
       });

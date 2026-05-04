@@ -119,6 +119,18 @@ const seatService = {
     } catch (error) {
       throw error.response?.data || error.message;
     }
+  },
+
+  async initializeSeats(eventId, groups = []) {
+    try {
+      const response = await api.post('/seats/initialize', { 
+        event_id: eventId,
+        groups: groups 
+      });
+      return response.data.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
   }
 };
 

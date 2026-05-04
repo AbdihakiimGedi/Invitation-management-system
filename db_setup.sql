@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS seat_groups (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+
 -- 17. Create seat_assignments table
 CREATE TABLE IF NOT EXISTS seat_assignments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

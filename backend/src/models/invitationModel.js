@@ -2,27 +2,27 @@ const db = require('../config/database');
 
 const InvitationModel = {
   async create(data, client = db) {
-    const { event_id, eventparticipant_id, seat_group_id, qr_token, quantity = 1 } = data;
+    const { event_id, eventparticipant_id, seat_id, qr_token, quantity = 1 } = data;
     const query = `
-      INSERT INTO invitations (id, event_id, eventparticipant_id, seat_group_id, qr_token, quantity, status, comm_status)
+      INSERT INTO invitations (id, event_id, eventparticipant_id, seat_id, qr_token, quantity, status, comm_status)
       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'ACTIVE', 'PENDING')
       RETURNING *
     `;
-    const res = await client.query(query, [event_id, eventparticipant_id, seat_group_id, qr_token, quantity]);
+    const res = await client.query(query, [event_id, eventparticipant_id, seat_id, qr_token, quantity]);
     return res.rows[0];
   },
 
   async bulkCreate(invitations, client = db) {
     // Using unnest for bulk insert performance
     const query = `
-      INSERT INTO invitations (id, event_id, eventparticipant_id, seat_group_id, qr_token, quantity, status, comm_status)
+      INSERT INTO invitations (id, event_id, eventparticipant_id, seat_id, qr_token, quantity, status, comm_status)
       SELECT gen_random_uuid(), unnest($1::uuid[]), unnest($2::int[]), unnest($3::uuid[]), unnest($4::text[]), unnest($5::int[]), 'ACTIVE', 'PENDING'
       RETURNING *
     `;
     const res = await client.query(query, [
       invitations.map(i => i.event_id),
       invitations.map(i => i.participant_id),
-      invitations.map(i => i.seat_group_id),
+      invitations.map(i => i.seat_id),
       invitations.map(i => i.qr_token),
       invitations.map(i => i.quantity)
     ]);
@@ -31,12 +31,12 @@ const InvitationModel = {
 
   async getByToken(token) {
     const query = `
-      SELECT i.*, ep.user_id, ep.type_id, pt.type_name, e.event_name, sg.name as group_name
+      SELECT i.*, ep.user_id, ep.type_id, pt.type_name, e.event_name, s.zone as group_name, s.seat_number
       FROM invitations i
       JOIN event_participants ep ON i.eventparticipant_id = ep.eventparticipant_id
       JOIN people_types pt ON ep.type_id = pt.id
       JOIN events e ON i.event_id = e.id
-      JOIN seat_groups sg ON i.seat_group_id = sg.id
+      JOIN seats s ON i.seat_id = s.id
       WHERE i.qr_token = $1
     `;
     const res = await db.query(query, [token]);

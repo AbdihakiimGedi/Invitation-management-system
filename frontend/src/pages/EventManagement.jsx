@@ -138,8 +138,8 @@ const EventManagement = ({ user, setIsSidebarOpen }) => {
   return (
     <div className="p-6 md:p-10 min-h-screen bg-slate-50 dark:bg-slate-950 transition-all duration-500">
       <AdminHeader 
-        title="Ceremony Events" 
-        subtitle="Operational Schedule & Registry" 
+        title="Event Registry" 
+        subtitle="Operational Schedule & Flow" 
         setIsOpen={setIsSidebarOpen} 
         user={user}
       >
@@ -148,135 +148,135 @@ const EventManagement = ({ user, setIsSidebarOpen }) => {
             setSelectedEvent(null);
             setIsModalOpen(true);
           }}
-          className="btn-primary flex items-center space-x-2 shadow-lg shadow-primary-600/20"
+          className="px-6 py-3.5 rounded-2xl bg-primary-600 text-white font-black text-[11px] uppercase tracking-[0.2em] hover:bg-primary-700 transition-all shadow-xl shadow-primary-600/20 active:scale-95 flex items-center space-x-3"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" />
           </svg>
-          <span className="text-sm font-bold">Initiate Event</span>
+          <span>Initiate Event</span>
         </button>
       </AdminHeader>
 
       {/* Stats Section */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
         {stats.map((s, i) => (
-          <div key={i} className="card-modern p-6 flex flex-col justify-between group hover:border-primary-200 transition-all">
-             <div className="flex justify-between items-start mb-4">
-                <span className={`p-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover:text-primary-600 transition-colors ${s.color?.replace('text-', 'bg-').replace('-600', '-50')}`}>
+          <div key={i} className="group p-7 rounded-[2.5rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-premium hover:shadow-premium-hover transition-all duration-500">
+             <div className="flex justify-between items-start mb-6">
+                <div className={`p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 transition-colors group-hover:scale-110 duration-300 ${s.color?.replace('text-', 'text-') || 'text-slate-400'}`}>
                    {s.icon}
-                </span>
-                <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest bg-white dark:bg-slate-900 px-2 py-1 rounded-md border border-slate-100 dark:border-slate-800">Metrics</span>
+                </div>
+                <div className="w-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700"></div>
              </div>
              <div>
-                <h4 className="text-[0.65rem] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">{s.label}</h4>
-                <p className={`text-4xl font-bold tracking-tight text-slate-900 dark:text-white ${s.color || ''}`}>
-                   {loading ? <span className="animate-pulse">...</span> : s.value}
+                <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-1">{s.label}</h4>
+                <p className={`text-4xl font-black tracking-tighter text-slate-900 dark:text-white ${s.color || ''}`}>
+                   {loading ? <span className="animate-pulse opacity-20">••</span> : s.value}
                 </p>
              </div>
           </div>
         ))}
       </section>
 
-      {/* Registry Table Container */}
-      <section className="card-modern rounded-3xl overflow-hidden shadow-xl shadow-slate-200/50 dark:shadow-none border-slate-100">
-        <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900">
-          <div className="flex items-center space-x-3">
-             <div className="w-1.5 h-8 bg-primary-600 rounded-full"></div>
+      {/* Table Section */}
+      <section className="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-premium overflow-hidden">
+        <div className="px-10 py-8 border-b border-slate-50 dark:border-slate-800/50 flex justify-between items-center">
+          <div className="flex items-center space-x-4">
+             <div className="w-2 h-8 bg-primary-600 rounded-full animate-pulse"></div>
              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">System Registry</h3>
-                <p className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">Authorized Records Only</p>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight uppercase">System Records</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-0.5">Verified Institutional Data</p>
              </div>
           </div>
-          <div className="flex items-center space-x-2 bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-xl border border-slate-100 dark:border-slate-700">
+          <div className="hidden sm:flex items-center space-x-2 bg-slate-50 dark:bg-slate-800/50 px-5 py-2.5 rounded-2xl border border-slate-100 dark:border-slate-800">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[0.6rem] font-bold text-slate-500 uppercase tracking-widest">
-              Live Monitor
-            </span>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Network Active</span>
           </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-800/50">
-                <th className="px-8 py-4 text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">Event Specification</th>
-                <th className="px-8 py-4 text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">Timeline & Venue</th>
-                <th className="px-8 py-4 text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">Status</th>
-                <th className="px-8 py-4 text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest text-right border-b border-slate-100 dark:border-slate-800">Operations</th>
+              <tr className="bg-slate-50/30 dark:bg-slate-800/30">
+                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Specification</th>
+                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Timeline/Venue</th>
+                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">State</th>
+                <th className="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Operations</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50">
               {loading ? (
                 <tr>
-                  <td colSpan="4" className="text-center py-24">
-                    <div className="flex flex-col items-center space-y-4">
-                      <div className="w-10 h-10 border-4 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
-                      <span className="text-[0.7rem] font-bold text-slate-400 uppercase tracking-[0.2em] mt-2">Accessing Records...</span>
+                  <td colSpan="4" className="text-center py-32">
+                    <div className="flex flex-col items-center space-y-6">
+                      <div className="w-12 h-12 border-[3px] border-primary-600 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Accessing Cryptographic Records</span>
                     </div>
                   </td>
                 </tr>
               ) : events.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="text-center py-32">
-                    <div className="flex flex-col items-center space-y-4 opacity-40">
-                       <svg className="w-16 h-16 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                       </svg>
-                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No primary records identified</p>
+                  <td colSpan="4" className="text-center py-40">
+                    <div className="flex flex-col items-center space-y-6 opacity-40">
+                       <div className="w-20 h-20 rounded-[2.5rem] bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                         <svg className="w-10 h-10 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                         </svg>
+                       </div>
+                       <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Zero primary entries found</p>
                     </div>
                   </td>
                 </tr>
               ) : events.map((event) => (
-                <tr key={event.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-all group cursor-default">
-                  <td className="px-8 py-6 max-w-sm">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slate-900 dark:text-white tracking-tight text-base mb-1 group-hover:text-primary-600 transition-colors">{event.event_name}</span>
-                      <span className="text-[0.7rem] font-medium text-slate-500 dark:text-slate-400 line-clamp-1 leading-relaxed">
-                        {event.description || 'System-indexed graduation ceremony sequence.'}
+                <tr key={event.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-all group">
+                  <td className="px-10 py-8">
+                    <div className="flex flex-col space-y-1.5">
+                      <span className="font-black text-slate-900 dark:text-white tracking-tight text-base group-hover:text-primary-600 transition-colors uppercase">{event.event_name}</span>
+                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 line-clamp-1 italic tracking-tight">
+                        {event.description || 'System-indexed graduation sequence'}
                       </span>
                     </div>
                   </td>
-                  <td className="px-8 py-6">
-                    <div className="flex flex-col space-y-1.5">
+                  <td className="px-10 py-8">
+                    <div className="flex flex-col space-y-2">
                       <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-200">
-                        <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        <span className="text-[0.8rem] font-bold">
+                        <span className="text-[13px] font-black tracking-tight">
                           {new Date(event.event_date).toLocaleDateString(undefined, { 
                             month: 'short', day: 'numeric', year: 'numeric' 
                           })}
                         </span>
                       </div>
-                      <div className="text-[0.65rem] text-primary-600 dark:text-primary-400 font-bold uppercase tracking-widest flex items-center space-x-1.5">
-                        <div className="w-1 h-1 bg-primary-600 rounded-full"></div>
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-widest flex items-center space-x-2">
+                        <div className="w-1 h-1 bg-primary-600 rounded-full animate-pulse"></div>
                         <span>{event.location}</span>
                       </div>
                     </div>
                   </td>
-                  <td className="px-8 py-6">
-                    <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-[0.6rem] font-bold uppercase tracking-widest border ${
-                      event.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-900/50' :
-                      event.status === 'finished' ? 'bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-900/50' :
-                      'bg-slate-50 text-slate-500 border-slate-100 dark:bg-slate-800 dark:border-slate-700'
+                  <td className="px-10 py-8">
+                    <span className={`inline-flex items-center px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest border shadow-sm ${
+                      event.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-900/30' :
+                      event.status === 'finished' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-950/30 dark:border-indigo-900/30' :
+                      'bg-slate-50 text-slate-400 border-slate-100 dark:bg-slate-800 dark:border-slate-700'
                     }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full mr-2 ${
-                        event.status === 'active' ? 'bg-emerald-500 animate-pulse' :
+                      <span className={`w-2 h-2 rounded-full mr-2.5 ${
+                        event.status === 'active' ? 'bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]' :
                         event.status === 'finished' ? 'bg-indigo-500' :
                         'bg-slate-400'
                       }`}></span>
                       {event.status}
                     </span>
                   </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center justify-end space-x-2">
+                  <td className="px-10 py-8">
+                    <div className="flex items-center justify-end space-x-3">
                         <button 
                           onClick={() => {
                             setManagingEvent(event);
                             setIsManageModalOpen(true);
                           }}
-                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 hover:shadow-sm transition-all"
-                          title="Seating & Invitations"
+                          className="w-11 h-11 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-primary-600 hover:bg-white dark:hover:bg-slate-700 hover:shadow-premium transition-all duration-300"
+                          title="Seating Architecture"
                         >
                           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -287,8 +287,8 @@ const EventManagement = ({ user, setIsSidebarOpen }) => {
                             setViewingEvent(event);
                             setIsViewerModalOpen(true);
                           }}
-                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:shadow-sm transition-all"
-                          title="View Intelligence"
+                          className="w-11 h-11 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-emerald-600 hover:bg-white dark:hover:bg-slate-700 hover:shadow-premium transition-all duration-300"
+                          title="Intelligence Viewer"
                         >
                           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -300,8 +300,8 @@ const EventManagement = ({ user, setIsSidebarOpen }) => {
                             setSelectedEvent(event);
                             setIsModalOpen(true);
                           }}
-                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 hover:shadow-sm transition-all"
-                          title="Tune Configuration"
+                          className="w-11 h-11 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 hover:shadow-premium transition-all duration-300"
+                          title="Config Tune"
                         >
                           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -309,11 +309,11 @@ const EventManagement = ({ user, setIsSidebarOpen }) => {
                         </button>
                         <button 
                           onClick={() => handleDelete(event.id)}
-                          className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:shadow-sm transition-all"
-                          title="Archive Record"
+                          className="w-11 h-11 flex items-center justify-center rounded-2xl bg-rose-50 dark:bg-rose-950/20 text-rose-400 hover:text-rose-600 hover:bg-white dark:hover:bg-rose-900/30 hover:shadow-premium transition-all duration-300"
+                          title="Purge Record"
                         >
                           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
                         </button>
                     </div>

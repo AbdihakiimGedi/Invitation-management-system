@@ -3,92 +3,98 @@ import AdminHeader from '../components/AdminHeader';
 
 const AdminDashboard = ({ user, setIsSidebarOpen }) => {
   const stats = [
-    { label: 'Graduates', value: '452', change: '+12%', trend: 'up' },
-    { label: 'Invitations', value: '1,280', change: '+5%', trend: 'up' },
-    { label: 'Presence', value: '92%', change: 'Today', trend: 'neutral' },
+    { label: 'Total Graduates', value: '452', change: '+12%', trend: 'up' },
+    { label: 'Invitations Sent', value: '1,280', change: '+5%', trend: 'up' },
+    { label: 'Current Presence', value: '92%', change: 'Real-time', trend: 'neutral' },
   ];
 
   return (
     <div className="p-6 md:p-10 min-h-screen bg-slate-50 dark:bg-slate-950 transition-all duration-500">
       <AdminHeader 
-        title="Dashboard" 
-        subtitle="Operational Overview" 
+        title="Command Center" 
+        subtitle="System Intelligence Overview" 
         setIsOpen={setIsSidebarOpen} 
         user={user} 
       />
 
       {/* Stats Grid */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
         {stats.map((s, i) => (
-          <div key={i} className="card-modern p-8 flex flex-col justify-between hover:shadow-md transition-shadow">
-             <div className="flex justify-between items-start mb-4">
-                <span className="text-[0.65rem] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest pl-0.5">
-                  {s.label}
-                </span>
-                <div className={`px-2.5 py-1 rounded-lg text-[0.65rem] font-bold ${
-                  s.trend === 'up' ? 'bg-green-50 text-green-600 dark:bg-green-900/20' : 'bg-primary-50 text-primary-600 dark:bg-primary-900/20'
+          <div key={i} className="group p-8 rounded-[2.5rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-premium hover:shadow-premium-hover transition-all duration-500">
+             <div className="flex justify-between items-start mb-6">
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 text-primary-600 dark:text-primary-400 group-hover:scale-110 transition-transform duration-300">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                  s.trend === 'up' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20' : 'bg-primary-50 text-primary-600 dark:bg-primary-900/20'
                 }`}>
                   {s.change}
                 </div>
              </div>
-             <div className="flex items-baseline space-x-2">
-                <span className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">
+             <div>
+                <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-2">{s.label}</p>
+                <h4 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">
                   {s.value}
-                </span>
+                </h4>
              </div>
           </div>
         ))}
       </section>
 
       {/* Main Content Grid */}
-      <section className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <section className="grid grid-cols-1 xl:grid-cols-2 gap-10">
          {/* Live Activity Card */}
-         <div className="card-modern p-10 flex flex-col h-full bg-white/50 backdrop-blur-sm">
-            <div className="flex justify-between items-center mb-10">
-               <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Recent Activity</h3>
-               <button className="text-xs font-semibold text-primary-600 hover:underline">View All</button>
+         <div className="p-10 rounded-[3rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-premium flex flex-col h-full">
+            <div className="flex justify-between items-center mb-12">
+               <div className="flex items-center space-x-3">
+                 <div className="w-1.5 h-6 bg-primary-600 rounded-full"></div>
+                 <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Recent Activity</h3>
+               </div>
+               <button className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:tracking-[0.2em] transition-all">Audit Logs</button>
             </div>
             
             <div className="space-y-4 flex-1">
                {[1, 2, 3, 4].map(i => (
-                 <div key={i} className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-white dark:hover:bg-slate-800">
-                    <div className="flex items-center space-x-4">
-                       <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-200 font-bold text-xs uppercase">
-                         {i % 2 === 0 ? 'G' : 'V'}
+                 <div key={i} className="group flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/40 rounded-3xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-white dark:hover:bg-slate-800 hover:shadow-md">
+                    <div className="flex items-center space-x-5">
+                       <div className="w-12 h-12 bg-white dark:bg-slate-900 rounded-2xl flex items-center justify-center text-primary-600 dark:text-primary-400 font-black text-sm border border-slate-100 dark:border-slate-800 shadow-sm group-hover:rotate-6 transition-all duration-300">
+                         {i % 2 === 0 ? 'GR' : 'GS'}
                        </div>
                        <div>
-                          <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">Graduate Profile {i}</p>
-                          <p className="text-[0.65rem] text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wider">B.Sc Information Technology</p>
+                          <p className="font-black text-slate-900 dark:text-slate-100 text-[13px] tracking-tight">Access Granted: Profile #{i+240}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mt-0.5">Primary Entrance Gate</p>
                        </div>
                     </div>
-                    <span className="text-[0.6rem] font-bold text-slate-400 uppercase tracking-widest">2m ago</span>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest opacity-60">2m ago</span>
                  </div>
                ))}
             </div>
 
-            <button className="w-full mt-10 btn-secondary py-5 text-sm">
-              Generate Detailed Report
+            <button className="w-full mt-12 py-5 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white font-black text-[11px] uppercase tracking-widest hover:bg-primary-600 transition-all shadow-xl shadow-slate-900/10">
+              Generate System Report
             </button>
          </div>
 
          {/* Monitoring Status Card */}
-         <div className="card-modern p-10 flex flex-col items-center justify-center text-center bg-white">
-            <div className="mb-10 inline-flex p-8 rounded-[3rem] bg-primary-50 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-800">
-               <div className="relative">
-                  <div className="absolute inset-0 bg-primary-500 blur-2xl opacity-20 animate-pulse"></div>
-                  <svg className="w-16 h-16 text-primary-600 relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+         <div className="p-10 rounded-[3rem] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-premium flex flex-col items-center justify-center text-center">
+            <div className="mb-12 relative">
+               <div className="absolute inset-0 bg-primary-600 blur-[60px] opacity-20 animate-pulse rounded-full"></div>
+               <div className="relative z-10 w-32 h-32 rounded-[2.5rem] bg-primary-50 dark:bg-primary-900/10 border border-primary-100 dark:border-primary-800 flex items-center justify-center">
+                  <svg className="w-14 h-14 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04M12 21.5c-2.315 0-4.498-.716-6.318-1.944M12 21.5c2.315 0 4.498-.716 6.318-1.944M12 21.5V12.75" />
                   </svg>
                </div>
             </div>
             
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight mb-2">Gate Intelligence</h3>
-            <p className="text-slate-500 dark:text-slate-400 font-medium text-sm max-w-xs mb-10 leading-relaxed">
-              Real-time monitoring is active across all entry points. Currently processing incoming QR validations.
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter uppercase mb-3">Gate Intelligence Active</h3>
+            <p className="text-slate-500 dark:text-slate-400 font-bold text-xs max-w-xs mb-12 leading-relaxed uppercase tracking-widest opacity-80">
+              Real-time cryptographic validation is running on all terminals. Status: <span className="text-emerald-500 italic">Operational</span>
             </p>
             
-            <button className="btn-primary w-full py-5 text-sm shadow-xl shadow-primary-600/20">
-              Open Gate Monitor
+            <button className="w-full max-w-xs py-5 rounded-2xl bg-primary-600 text-white font-black text-[11px] uppercase tracking-[0.2em] hover:bg-primary-700 transition-all shadow-2xl shadow-primary-600/20 active:scale-95">
+              Launch Live Monitor
             </button>
          </div>
       </section>

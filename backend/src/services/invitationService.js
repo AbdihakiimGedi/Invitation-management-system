@@ -4,6 +4,7 @@ const SeatModel = require('../models/seatModel');
 const CommunicationService = require('./communicationService');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
+const db = require('../config/database');
 
 
 const InvitationService = {
@@ -31,45 +32,48 @@ const InvitationService = {
       // 1. Mark batch as processing
       await InvitationBatchModel.updateStatus(batch.id, 'Processing');
 
-      // 2. Fetch all seat assignments for this event
-      const assignments = await SeatModel.getGroupsWithAssignments(batch.event_id);
-      
-      // Flatten assignments (assignments is an array of groups, each with a roster)
-      let totalToProcess = 0;
-      const tasks = [];
-      
-      for (const group of assignments) {
-        if (!group.roster) continue;
-        for (const person of group.roster) {
-          totalToProcess++;
-          tasks.push({
-            event_id: batch.event_id,
-            eventparticipant_id: person.eventparticipant_id,
-            seat_group_id: group.id,
-            person: person,
-            groupName: group.name
-          });
-        }
+      // 2. STRICTURE: Fetch available physical seats from the 'seats' table
+      const availableSeatsRes = await db.query(
+        "SELECT id, zone, seat_number, category_type FROM seats WHERE event_id = $1 AND status = 'Available' ORDER BY zone, id",
+        [batch.event_id]
+      );
+      const availableSeats = availableSeatsRes.rows;
+
+      if (availableSeats.length === 0) {
+        throw new Error('Seats must be created before generating invitations.');
       }
 
-      await InvitationBatchModel.updateProgress(batch.id, 0); // Reset progress
+      // 3. Fetch all eligible participants for this event
+      const participantsRes = await db.query(
+        "SELECT ep.eventparticipant_id, ep.user_id, s.full_name, s.email, e.event_name, e.location as event_location, e.event_date FROM event_participants ep JOIN students s ON ep.user_id = s.student_id JOIN events e ON ep.event_id = e.id WHERE ep.event_id = $1 AND ep.status = 'eligible'",
+        [batch.event_id]
+      );
+      const participants = participantsRes.rows;
 
-      // 3. Process each person
+      if (participants.length > availableSeats.length) {
+        throw new Error(`Insufficient seats. Required: ${participants.length}, Available: ${availableSeats.length}. Please define more seats in the Seat Management Panel.`);
+      }
+
+      await InvitationBatchModel.updateProgress(batch.id, 0);
+
+      // 4. Process each person and assign a seat
       let processed = 0;
       const qtyPerPerson = batch.qty_per_person || 1;
 
-      for (const task of tasks) {
+      for (let i = 0; i < participants.length; i++) {
+        const person = participants[i];
+        const seat = availableSeats[i]; // Sequential assignment from pool
+
         try {
-          // Generate multiple invitations if qty_per_person > 1
           const generatedTokens = [];
           
-          for (let i = 0; i < qtyPerPerson; i++) {
+          for (let j = 0; j < qtyPerPerson; j++) {
             const token = crypto.randomBytes(32).toString('hex');
             
             await InvitationModel.create({
-              event_id: task.event_id,
-              eventparticipant_id: task.eventparticipant_id,
-              seat_group_id: task.seat_group_id,
+              event_id: batch.event_id,
+              eventparticipant_id: person.eventparticipant_id,
+              seat_id: seat.id, // Linked to individual seat
               qr_token: token,
               quantity: 1
             });
@@ -77,27 +81,30 @@ const InvitationService = {
             generatedTokens.push(token);
           }
 
+          // Mark seat as occupied
+          await db.query("UPDATE seats SET status = 'Occupied' WHERE id = $1", [seat.id]);
+
           // Send notification with all tokens
           let formattedDate = 'TBD';
           let formattedTime = 'TBD';
-          if (task.person.event_date) {
-            const d = new Date(task.person.event_date);
+          if (person.event_date) {
+            const d = new Date(person.event_date);
             formattedDate = d.toLocaleDateString();
             formattedTime = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           }
-          const eventLocation = task.person.event_location || 'TBD';
 
-          if (task.person.email) {
+          if (person.email) {
             await CommunicationService.sendEmail(
-              task.person.email, 
-              `Graduation Invitation – ${task.person.event_name}`, 
+              person.email, 
+              `Graduation Invitation – ${person.event_name}`, 
               { 
                 qrTokens: generatedTokens, 
-                fullName: task.person.full_name,
-                eventName: task.person.event_name, 
-                groupName: task.groupName, 
+                fullName: person.full_name,
+                eventName: person.event_name, 
+                groupName: seat.zone, // Use seat zone/group name
+                seatNumber: seat.seat_number,
                 qty: qtyPerPerson,
-                eventLocation,
+                eventLocation: person.event_location,
                 eventDate: formattedDate,
                 eventTime: formattedTime
               }
@@ -141,6 +148,63 @@ You are officially invited to the graduation ceremony.
     } finally {
       this.isProcessing = false;
     }
+  },
+
+  /**
+   * Automatically generates invitations for all eligible participants of an event
+   * who don't already have one. Database-driven approach.
+   */
+  async autoGenerateForEvent(eventId, client = db) {
+    console.log(`[INVITATION] Auto-generating invitations for Event: ${eventId}`);
+    
+    // Step 1: Strict Seat Verification (Check for groups)
+    const groupCheck = await client.query('SELECT COUNT(*) FROM seat_groups WHERE event_id = $1', [eventId]);
+    if (parseInt(groupCheck.rows[0].count) === 0) {
+      throw new Error("Seats must be created before generating invitations.");
+    }
+
+    // Step 2: Fetch Available Seats
+    const availableSeatsRes = await client.query(
+      "SELECT id FROM seats WHERE event_id = $1 AND status = 'Available' ORDER BY zone, id",
+      [eventId]
+    );
+    const availableSeats = availableSeatsRes.rows;
+
+    // Step 3: Fetch Participants who need invitations
+    const participantsRes = await client.query(`
+      SELECT ep.eventparticipant_id 
+      FROM event_participants ep 
+      WHERE ep.event_id = $1 
+        AND ep.status = 'eligible'
+        AND NOT EXISTS (SELECT 1 FROM invitations i WHERE i.eventparticipant_id = ep.eventparticipant_id)
+      ORDER BY ep.eventparticipant_id
+    `, [eventId]);
+    const participants = participantsRes.rows;
+
+    if (participants.length === 0) return { count: 0 };
+
+    if (participants.length > availableSeats.length) {
+      throw new Error(`Insufficient seats. Required: ${participants.length}, Available: ${availableSeats.length}. Please define more seats.`);
+    }
+
+    // Step 4: Atomic Assignment & Creation
+    let createdCount = 0;
+    for (let i = 0; i < participants.length; i++) {
+      const epId = participants[i].eventparticipant_id;
+      const seatId = availableSeats[i].id;
+      const token = crypto.randomBytes(32).toString('hex');
+
+      await client.query(`
+        INSERT INTO invitations (id, event_id, eventparticipant_id, seat_id, qr_token, quantity, status, comm_status)
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, 1, 'ACTIVE', 'PENDING')
+      `, [eventId, epId, seatId, token]);
+
+      await client.query("UPDATE seats SET status = 'Occupied' WHERE id = $1", [seatId]);
+      createdCount++;
+    }
+
+    console.log(`[INVITATION] Created ${createdCount} new invitations for event ${eventId}`);
+    return { count: createdCount };
   }
 };
 

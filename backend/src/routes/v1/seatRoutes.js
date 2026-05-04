@@ -22,4 +22,7 @@ router.delete('/seat-assignments/:id', SeatController.deleteAssignment);
 router.get('/seat-groups/:eventId/with-assignments', SeatController.getGroupsWithAssignments);
 router.get('/seat-groups/:eventId/:groupId/participants', SeatController.getGroupParticipants);
 
+// Initialization
+router.post('/initialize', SeatController.initializeSeats);
+
 module.exports = router;

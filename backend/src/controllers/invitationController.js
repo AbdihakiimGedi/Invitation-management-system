@@ -42,6 +42,42 @@ const InvitationController = {
   },
 
   /**
+   * Triggers seating initialization for the event.
+   * This prepares the seat_assignments needed for invitation generation.
+   */
+  async initializeEventSeating(req, res) {
+    try {
+      const { event_id, groups } = req.body;
+      if (!event_id) return res.status(400).json({ error: 'Event ID is required' });
+
+      const SeatModel = require('../models/seatModel');
+      
+      // If groups are provided, we perform manual creation
+      if (groups && Array.isArray(groups) && groups.length > 0) {
+        const result = await SeatModel.createManualSeats(event_id, groups);
+        return res.json({ success: true, message: result.message, total_seats: result.totalSeats });
+      }
+
+      // If no groups provided, we check if seats ALREADY exist (Verification mode)
+      const existingGroups = await SeatModel.getSeatGroupsByEvent(event_id);
+      if (existingGroups.length === 0) {
+        return res.status(400).json({ 
+          error: 'Seats must be created before generating invitations. Please use the Seat Management panel to define your seating architecture.' 
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Seating architecture verified.',
+        groups_count: existingGroups.length
+      });
+    } catch (error) {
+      console.error('[INVITATION-CTRL] Seating initialization error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  /**
    * Public/Scanner endpoint to verify an invitation
    */
   async verifyInvitation(req, res) {

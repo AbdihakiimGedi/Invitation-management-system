@@ -213,6 +213,22 @@ const SeatController = {
       console.error('Get Group Participants Error:', error);
       return sendError(res, 'Failed to fetch roster', 500);
     }
+  },
+
+  async initializeSeats(req, res) {
+    try {
+      const { event_id, groups } = req.body;
+      if (!event_id) return sendError(res, 'Event ID is required', 400);
+      if (!groups || !Array.isArray(groups) || groups.length === 0) {
+        return sendError(res, 'At least one seat group must be defined.', 400);
+      }
+
+      const result = await SeatModel.createManualSeats(event_id, groups);
+      return sendSuccess(res, result, result.message);
+    } catch (error) {
+      console.error('Initialize Seats Error:', error);
+      return sendError(res, error.message || 'Failed to initialize seats', 500);
+    }
   }
 };
 
