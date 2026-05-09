@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS graduates (
     user_id UUID PRIMARY KEY REFERENCES users(id),
     department_id UUID REFERENCES departments(id),
     student_id VARCHAR(50) UNIQUE NOT NULL,
-    degree_level VARCHAR(20) NOT NULL CHECK (degree_level IN ('PhD', 'Master''s', 'Bachelor''s')),
+    degree_level VARCHAR(50) NOT NULL CHECK (degree_level IN ('PhD', 'Master''s', 'Bachelor''s')),
     gpa DECIMAL(4,2),
     academic_percentage DECIMAL(5,2)
 );
@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS invitations (
 CREATE TABLE IF NOT EXISTS people_types (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     type_name VARCHAR(50) UNIQUE NOT NULL,
-    table_name VARCHAR(50) UNIQUE NOT NULL,
+    table_name VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -136,7 +136,7 @@ CREATE TABLE students (
     full_name VARCHAR(100) NOT NULL,
     department_id INT NOT NULL,
     faculty_id INT NOT NULL,
-    phone VARCHAR(20),
+    phone VARCHAR(50),
     email VARCHAR(100),
     gpa DECIMAL(3,2),
 
@@ -165,7 +165,7 @@ CREATE TABLE IF NOT EXISTS parents_guests (
     student_id VARCHAR(50) REFERENCES students(student_id) ON DELETE CASCADE,
     full_name VARCHAR(100) NOT NULL,
     relation_type VARCHAR(50), -- 'Father', 'Mother', 'Sister', 'Guest'
-    phone VARCHAR(20),
+    phone VARCHAR(50),
     email VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -212,5 +212,6 @@ CREATE TABLE IF NOT EXISTS seat_assignments (
 -- 18. Seed initial People Types
 INSERT INTO people_types (type_name, table_name) VALUES 
 ('Graduates', 'students'),
-('Guests', 'parents_guests')
+('Guests', 'guests'),
+('VIP Guests', 'guests')
 ON CONFLICT (type_name) DO UPDATE SET table_name = EXCLUDED.table_name;

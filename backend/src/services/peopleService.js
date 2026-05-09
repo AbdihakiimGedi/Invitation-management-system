@@ -6,6 +6,91 @@ const InvitationService = require('./invitationService');
 const InvitationEmailService = require('./invitationEmailService');
 
 const PeopleService = {
+  async _getPeopleTypeMeta({ typeId, typeName, tableName } = {}, client = db) {
+    const conditions = [];
+    const params = [];
+
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (typeId && uuidPattern.test(String(typeId))) {
+      params.push(typeId);
+      conditions.push(`id = $${params.length}`);
+    }
+    if (typeName) {
+      params.push(typeName);
+      conditions.push(`type_name = $${params.length}`);
+    }
+    if (tableName) {
+      params.push(tableName);
+      conditions.push(`table_name = $${params.length}`);
+    }
+
+    if (conditions.length === 0) {
+      throw new Error('Participant type metadata is required.');
+    }
+
+    const res = await client.query(
+      `SELECT id, type_name, table_name FROM people_types WHERE ${conditions.join(' OR ')} LIMIT 1`,
+      params
+    );
+    if (res.rowCount === 0) {
+      throw new Error('Participant type is not configured in people_types.');
+    }
+    return res.rows[0];
+  },
+
+  async _getTypeStrategy(typeMeta, client = db) {
+    const res = await client.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND LOWER(table_name) = LOWER($1)
+    `, [typeMeta.table_name]);
+    const columns = new Set(res.rows.map(r => r.column_name));
+
+    if (columns.has('student_id') && columns.has('full_name')) return 'student';
+    if (columns.has('guest_id') && columns.has('guest_name')) return 'guest';
+    return 'generic';
+  },
+
+  async _generateAndQueueInvitationEmails(eventId, logPrefix = 'INVITATION') {
+    try {
+      const generation = await InvitationService.autoGenerateForEvent(eventId);
+
+      setImmediate(() => {
+        InvitationEmailService.sendInvitations(eventId).catch(err => {
+          console.error(`[${logPrefix}-BG] Email dispatch failed:`, err);
+        });
+      });
+
+      return generation;
+    } catch (invErr) {
+      console.error(`[${logPrefix}] Invitation workflow failed:`, invErr);
+      return {
+        count: 0,
+        blocked: 0,
+        message: invErr.message || 'Invitation workflow failed.'
+      };
+    }
+  },
+
+  async importByType({ eventId, typeId, typeName, tableName, mapping, dataOrPath, confirmCapacity = false, isPath = true }) {
+    const typeMeta = await this._getPeopleTypeMeta({ typeId, typeName, tableName });
+    const strategy = await this._getTypeStrategy(typeMeta);
+
+    if (strategy === 'student') {
+      return await this.importStudents(eventId, mapping, dataOrPath, confirmCapacity, isPath, typeMeta.id);
+    }
+    if (strategy === 'guest') {
+      return await this.importGuests(eventId, mapping, dataOrPath, confirmCapacity, isPath, typeMeta.id);
+    }
+
+    if (!isPath) {
+      throw new Error(`Manual registration is not supported for table: ${typeMeta.table_name}`);
+    }
+    return await this.importPeople(typeMeta.table_name, eventId, mapping, dataOrPath);
+  },
+
   /**
    * Fetches all available people types from the metadata table.
    */
@@ -13,6 +98,44 @@ const PeopleService = {
     const query = 'SELECT * FROM people_types ORDER BY type_name ASC';
     const result = await db.query(query);
     return result.rows;
+  },
+  
+  async getLookupData(tableName, filters = {}) {
+    const key = (tableName || '').toLowerCase();
+    console.log(`[DEBUG] getLookupData called for: ${key}`, { filters });
+    
+    const allowedTables = ['faculties', 'departments', 'people_types'];
+    if (!allowedTables.includes(key)) {
+      throw new Error(`Access to table ${tableName} is restricted.`);
+    }
+
+    const client = await db.pool.connect();
+    try {
+      let query = '';
+      let params = [];
+
+      if (key === 'faculties') {
+        query = 'SELECT faculty_id as id, faculty_name as name FROM faculties ORDER BY faculty_name ASC';
+      } else if (key === 'departments') {
+        if (filters.faculty_id) {
+          query = 'SELECT department_id as id, department_name as name, faculty_id FROM departments WHERE faculty_id = $1 ORDER BY department_name ASC';
+          params = [filters.faculty_id];
+        } else {
+          query = 'SELECT department_id as id, department_name as name, faculty_id FROM departments ORDER BY department_name ASC';
+        }
+      } else if (key === 'people_types') {
+        query = 'SELECT id, type_name as name FROM people_types ORDER BY 2 ASC';
+      } else {
+        query = `SELECT id, name FROM ${key} ORDER BY name ASC`;
+      }
+
+      console.log(`[DEBUG] Executing Query: ${query} with params:`, params);
+      const res = await client.query(query, params);
+      console.log(`[DEBUG] Rows returned: ${res.rowCount}`);
+      return res.rows;
+    } finally {
+      client.release();
+    }
   },
 
   /**
@@ -253,13 +376,13 @@ const PeopleService = {
    * Specialized import for Students with Batch Optimization & Duplicate Prevention.
    * Performs 4-pass resolution (Faculties -> Departments -> Students -> Participants).
    */
-  async importStudents(eventId, mapping, filePath, confirmCapacity = false) {
-    if (Object.keys(mapping).length === 0) {
+  async importStudents(eventId, mapping, dataOrPath, confirmCapacity = false, isPath = true, typeId = null) {
+    if (mapping && Object.keys(mapping).length === 0) {
       return { totalRows: 0, insertedStudents: 0, skippedDuplicates: 0, newFaculties: 0, newDepartments: 0 };
     }
 
-    const rows = this._readFileAsJson(filePath);
-    if (!rows.length) return { totalRows: 0, insertedStudents: 0, skippedDuplicates: 0, newFaculties: 0, newDepartments: 0 };
+    const rows = isPath ? this._readFileAsJson(dataOrPath) : dataOrPath;
+    if (!rows || !rows.length) return { totalRows: 0, insertedStudents: 0, skippedDuplicates: 0, newFaculties: 0, newDepartments: 0 };
 
     const client = await db.pool.connect();
     
@@ -295,12 +418,20 @@ const PeopleService = {
 
       // --- PASS 0: Setup Mapping Helpers ---
       const getVal = (row, dbColumn) => {
+        if (!mapping) {
+          const val = row[dbColumn];
+          // If it's a hybrid object { id, name, isNew }, return it directly
+          if (typeof val === 'object' && val !== null && 'name' in val) {
+            return val;
+          }
+          return val !== undefined ? String(val).trim() : undefined;
+        }
         const excelHeader = Object.keys(mapping).find(k => mapping[k] === dbColumn);
         return excelHeader ? String(row[excelHeader] || '').trim() : undefined;
       };
 
       // --- NEW: Pre-Flight Capacity Interrupt ---
-      const validRowsInFile = rows.filter(r => !!getVal(r, 'student_id')).length;
+      const validRowsInFile = rows.filter(r => !!getVal(r, 'student_id') || !!getVal(r, 'guest_name')).length;
       if (validRowsInFile > remaining && !confirmCapacity) {
         await client.query('ROLLBACK');
         return { 
@@ -311,65 +442,126 @@ const PeopleService = {
       }
 
       // --- PASS 1: Resolve Faculties ---
-      const uniqueFacultyNames = [...new Set(rows.map(r => getVal(r, 'faculty_id')).filter(Boolean))];
-      
-      const existingFacultiesRes = await client.query(
-        'SELECT faculty_id, faculty_name FROM faculties WHERE LOWER(faculty_name) = ANY($1::text[])',
-        [uniqueFacultyNames.map(n => n.toLowerCase())]
-      );
-      
-      const facultyCache = {}; // name.toLowerCase() -> id
-      existingFacultiesRes.rows.forEach(f => facultyCache[f.faculty_name.toLowerCase()] = f.faculty_id);
+      const facultyValues = [...new Set(rows.map(r => getVal(r, 'faculty_id')).filter(Boolean))];
+      const facultyCache = {}; // id or name.toLowerCase() -> id
 
-      for (const name of uniqueFacultyNames) {
-        if (!facultyCache[name.toLowerCase()]) {
-          const insFac = await client.query(
-            'INSERT INTO faculties (faculty_name) VALUES ($1) RETURNING faculty_id',
-            [name]
+      for (const val of facultyValues) {
+        let fId = null;
+        let fName = null;
+
+        if (typeof val === 'object' && val !== null) {
+          // New structured hybrid payload
+          if (!val.isNew && val.id) {
+            fId = parseInt(val.id);
+            facultyCache[val.id] = fId;
+          } else {
+            fName = val.name?.trim();
+          }
+        } else {
+          // Legacy or Excel import
+          const isNumeric = !isNaN(val) && !isNaN(parseInt(val));
+          if (isNumeric) {
+            fId = parseInt(val);
+            facultyCache[val] = fId;
+          } else {
+            fName = String(val).trim();
+          }
+        }
+
+        if (fId && !facultyCache[String(fName || '').toLowerCase()]) {
+          // If we have an ID but don't know the name yet, fetch it for cache
+          const nameRes = await client.query('SELECT faculty_name FROM faculties WHERE faculty_id = $1', [fId]);
+          if (nameRes.rowCount > 0 && nameRes.rows[0].faculty_name) {
+            facultyCache[nameRes.rows[0].faculty_name.toLowerCase()] = fId;
+          }
+        } else if (fName) {
+          const lowerName = String(fName).toLowerCase();
+          if (facultyCache[lowerName]) continue;
+
+          // Lookup by name
+          const exFac = await client.query(
+            'SELECT faculty_id FROM faculties WHERE LOWER(faculty_name) = LOWER($1) LIMIT 1',
+            [fName]
           );
-          facultyCache[name.toLowerCase()] = insFac.rows[0].faculty_id;
-          summary.newFaculties++;
+          if (exFac.rowCount > 0) {
+            facultyCache[lowerName] = exFac.rows[0].faculty_id;
+          } else {
+            const insFac = await client.query(
+              'INSERT INTO faculties (faculty_name) VALUES ($1) RETURNING faculty_id',
+              [fName]
+            );
+            facultyCache[lowerName] = insFac.rows[0].faculty_id;
+            summary.newFaculties++;
+          }
         }
       }
 
       // --- PASS 2: Resolve Departments ---
-      const deptPairs = [];
-      const deptMap = new Map(); // "deptName|facId" -> true
+      const departmentCache = {}; // "deptNameOrId|facId" -> deptId
 
-      rows.forEach(r => {
-        const dName = getVal(r, 'department_id');
-        const fName = getVal(r, 'faculty_id');
-        if (dName && fName) {
-          const fId = facultyCache[fName.toLowerCase()];
-          const key = `${dName.toLowerCase()}|${fId}`;
-          if (!deptMap.has(key)) {
-            deptPairs.push({ name: dName, facultyId: fId });
-            deptMap.set(key, true);
+      for (const row of rows) {
+        const dVal = getVal(row, 'department_id');
+        const fVal = getVal(row, 'faculty_id');
+        
+        if (dVal && fVal) {
+          // Get the resolved faculty ID
+          let fId;
+          if (typeof fVal === 'object' && fVal !== null) {
+            fId = fVal.isNew ? facultyCache[String(fVal.name || '').toLowerCase()] : parseInt(fVal.id);
+          } else {
+            const fIsNumeric = !isNaN(fVal) && !isNaN(parseInt(fVal));
+            fId = fIsNumeric ? parseInt(fVal) : facultyCache[String(fVal || '').toLowerCase()];
           }
-        }
-      });
 
-      const departmentCache = {}; // name.toLowerCase() + facultyId -> id
-      for (const pair of deptPairs) {
-        const exDept = await client.query(
-          'SELECT department_id FROM departments WHERE LOWER(department_name) = LOWER($1) AND faculty_id = $2 LIMIT 1',
-          [pair.name, pair.facultyId]
-        );
-        if (exDept.rowCount > 0) {
-          departmentCache[`${pair.name.toLowerCase()}|${pair.facultyId}`] = exDept.rows[0].department_id;
-        } else {
-          const insDept = await client.query(
-            'INSERT INTO departments (department_name, faculty_id) VALUES ($1, $2) RETURNING department_id',
-            [pair.name, pair.facultyId]
-          );
-          departmentCache[`${pair.name.toLowerCase()}|${pair.facultyId}`] = insDept.rows[0].department_id;
-          summary.newDepartments++;
+          if (!fId) continue;
+
+          let dId = null;
+          let dName = null;
+
+          if (typeof dVal === 'object' && dVal !== null) {
+            if (!dVal.isNew && dVal.id) {
+              dId = parseInt(dVal.id);
+            } else {
+              dName = dVal.name?.trim();
+            }
+          } else {
+            const dIsNumeric = !isNaN(dVal) && !isNaN(parseInt(dVal));
+            if (dIsNumeric) {
+              dId = parseInt(dVal);
+            } else {
+              dName = String(dVal).trim();
+            }
+          }
+
+          const cacheKey = dId ? `${dId}|${fId}` : `${String(dName || '').toLowerCase()}|${fId}`;
+          if (departmentCache[cacheKey]) continue;
+
+          if (dId) {
+            departmentCache[cacheKey] = dId;
+          } else if (dName) {
+            const exDept = await client.query(
+              'SELECT department_id FROM departments WHERE LOWER(department_name) = LOWER($1) AND faculty_id = $2 LIMIT 1',
+              [dName, fId]
+            );
+            if (exDept.rowCount > 0) {
+              departmentCache[cacheKey] = exDept.rows[0].department_id;
+            } else {
+              const insDept = await client.query(
+                'INSERT INTO departments (department_name, faculty_id) VALUES ($1, $2) RETURNING department_id',
+                [dName, fId]
+              );
+              departmentCache[cacheKey] = insDept.rows[0].department_id;
+              summary.newDepartments++;
+            }
+          }
         }
       }
 
-      // --- PASS 3 PREP: Get Graduate Type ID ---
-      const typeRes = await client.query("SELECT id FROM people_types WHERE type_name = 'Graduates' LIMIT 1");
-      const graduateTypeId = typeRes.rows[0]?.id;
+      // --- PASS 3 PREP: Resolve participant type from DB metadata ---
+      const typeMeta = typeId
+        ? await this._getPeopleTypeMeta({ typeId }, client)
+        : await this._getPeopleTypeMeta({ tableName: 'students' }, client);
+      const participantTypeId = typeMeta.id;
 
       // --- PASS 4 PREP: Strict (EventID AND UserID) Batch Check ---
       const existingParticipantsRes = await client.query(
@@ -390,10 +582,28 @@ const PeopleService = {
           continue; 
         }
 
-        const fName = getVal(row, 'faculty_id');
-        const dName = getVal(row, 'department_id');
-        const fId = fName ? facultyCache[fName.toLowerCase()] : null;
-        const dId = (dName && fId) ? departmentCache[`${dName.toLowerCase()}|${fId}`] : null;
+        const fVal = getVal(row, 'faculty_id');
+        const dVal = getVal(row, 'department_id');
+
+        // Resolve fId from cache
+        let fId = null;
+        if (fVal) {
+          if (typeof fVal === 'object' && fVal !== null) {
+            fId = fVal.isNew ? facultyCache[String(fVal.name || '').toLowerCase()] : parseInt(fVal.id);
+          } else {
+            fId = !isNaN(fVal) ? parseInt(fVal) : facultyCache[String(fVal).toLowerCase()];
+          }
+        }
+
+        // Resolve dId from cache
+        let dId = null;
+        if (dVal && fId) {
+          if (typeof dVal === 'object' && dVal !== null) {
+            dId = dVal.isNew ? departmentCache[`${String(dVal.name || '').toLowerCase()}|${fId}`] : parseInt(dVal.id);
+          } else {
+            dId = !isNaN(dVal) ? parseInt(dVal) : departmentCache[`${String(dVal).toLowerCase()}|${fId}`];
+          }
+        }
 
         // --- AUTO-EXCLUSION DETECTION ---
         const financeIssue = getVal(row, 'has_finance_issue');
@@ -443,7 +653,7 @@ const PeopleService = {
         `, [studentId, hasFinance, hasExam]);
 
         // --- PASS 4: Strict Event Participation Duplicate & Capacity Prevention ---
-        if (eventId && graduateTypeId) {
+        if (eventId && participantTypeId) {
           if (idsSet.has(studentId)) {
             summary.alreadyInEvent++;
             
@@ -465,7 +675,7 @@ const PeopleService = {
                 VALUES ($1, $2, $3, $4, $5)
                 ON CONFLICT (event_id, user_id) 
                 DO UPDATE SET status = EXCLUDED.status, reason = EXCLUDED.reason
-              `, [eventId, studentId, graduateTypeId, status, rejectionReason]);
+              `, [eventId, studentId, participantTypeId, status, rejectionReason]);
               
               summary.addedToEvent++;
               idsSet.add(studentId);
@@ -496,7 +706,7 @@ const PeopleService = {
   /**
    * Finalizes participation and updates issues with strict duplication and capacity protection
    */
-  async processParticipation(eventId, studentData, exclusions, typeName = 'Graduates') {
+  async processParticipation(eventId, studentData, exclusions, typeName = null, typeId = null) {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
@@ -511,14 +721,10 @@ const PeopleService = {
       const capacityLimit = event.max_capacity || Infinity;
       let remaining = capacityLimit - currentCount;
 
-      // Fetch the UUID type_id for the specified type
-      const typeRes = await client.query('SELECT id FROM people_types WHERE type_name = $1', [typeName]);
-      const typeId = typeRes.rows[0]?.id;
-      if (!typeId) {
-        throw new Error(`Misconfigured database: Could not find '${typeName}' in people_types.`);
-      }
-
-      const isGuest = typeName.toLowerCase().includes('guest');
+      const typeMeta = await this._getPeopleTypeMeta({ typeId, typeName }, client);
+      const finalTypeId = typeMeta.id;
+      const strategy = await this._getTypeStrategy(typeMeta, client);
+      const usesGuestRecord = strategy === 'guest';
 
       // STRICT PROTECTION: Fetch current manifest for the event 
       const currentRes = await client.query('SELECT user_id FROM event_participants WHERE event_id = $1', [eventId]);
@@ -528,19 +734,35 @@ const PeopleService = {
 
       for (const student of studentData) {
         const studentId = student.student_id;
-        
-        // --- Skip duplicate participation assignments ---
-        if (currentIdsSet.has(studentId)) continue; 
+
+        const exclusion = exclusions.find(e => e.student_id === studentId);
+        const guestRefId = usesGuestRecord ? parseInt(studentId, 10) : null;
+        const nextStatus = exclusion ? 'rejected' : 'eligible';
+        const nextReason = exclusion ? exclusion.reason : null;
+
+        if (currentIdsSet.has(studentId)) {
+          if (!usesGuestRecord) {
+            await client.query(`
+              UPDATE student_status
+              SET has_finance_issue = $1, has_exam_issue = $2
+              WHERE student_id = $3
+            `, [nextReason === 'Finance issue', nextReason === 'Exam issue', studentId]);
+          }
+
+          await client.query(`
+            UPDATE event_participants
+            SET status = $1, reason = $2, guest_ref_id = COALESCE($3, guest_ref_id)
+            WHERE event_id = $4 AND user_id = $5
+          `, [nextStatus, nextReason, guestRefId, eventId, studentId]);
+          continue;
+        }
 
         // Capacity Block
         if (newlyAdded >= remaining) break;
 
-        const exclusion = exclusions.find(e => e.student_id === studentId);
-        const guestRefId = isGuest ? parseInt(studentId, 10) : null;
-
         if (exclusion) {
           // Update student status ONLY for graduates
-          if (!isGuest) {
+          if (!usesGuestRecord) {
             await client.query(`
               UPDATE student_status 
               SET has_finance_issue = $1, has_exam_issue = $2
@@ -553,14 +775,14 @@ const PeopleService = {
             VALUES ($1, $2, $3, 'rejected', $4, $5)
             ON CONFLICT (event_id, user_id) 
             DO UPDATE SET status = EXCLUDED.status, reason = EXCLUDED.reason, guest_ref_id = EXCLUDED.guest_ref_id
-          `, [eventId, studentId, typeId, exclusion.reason, guestRefId]);
+          `, [eventId, studentId, finalTypeId, exclusion.reason, guestRefId]);
         } else {
           await client.query(`
             INSERT INTO event_participants (event_id, user_id, type_id, status, guest_ref_id)
             VALUES ($1, $2, $3, 'eligible', $4)
             ON CONFLICT (event_id, user_id) 
             DO UPDATE SET status = EXCLUDED.status, guest_ref_id = EXCLUDED.guest_ref_id
-          `, [eventId, studentId, typeId, guestRefId]);
+          `, [eventId, studentId, finalTypeId, guestRefId]);
         }
         
         currentIdsSet.add(studentId);
@@ -570,21 +792,9 @@ const PeopleService = {
       await client.query('COMMIT');
 
       // --- NEW: Automatic Invitation Generation (Blocking) ---
-      try {
-        await InvitationService.autoGenerateForEvent(eventId);
-        
-        // --- NEW: Automatic Email Dispatch (Non-Blocking / Background) ---
-        // We trigger this in the background so the UI doesn't wait for SMTP response
-        setImmediate(() => {
-          InvitationEmailService.sendInvitations(eventId).catch(err => {
-            console.error('[INVITATION-BG] Background email dispatch failed:', err);
-          });
-        });
-      } catch (invErr) {
-        console.error('[INVITATION] Automatic invitation generation failed:', invErr);
-      }
+      const invitations = await this._generateAndQueueInvitationEmails(eventId, 'INVITATION');
 
-      return { success: true };
+      return { success: true, invitations };
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -638,8 +848,8 @@ const PeopleService = {
         // Step 3: If Not Exists -> Insert new record
         let finalTypeId = typeId;
         if (!finalTypeId) {
-           const typeRes = await client.query("SELECT id FROM people_types WHERE type_name = 'Graduates'");
-           finalTypeId = typeRes.rows[0]?.id;
+           const typeMeta = await this._getPeopleTypeMeta({ tableName: 'students' }, client);
+           finalTypeId = typeMeta.id;
         }
 
         if (!finalTypeId) throw new Error("Participant type classification required for initial entry.");
@@ -656,19 +866,7 @@ const PeopleService = {
 
       // --- NEW: Post-Inclusion Automation Trigger ---
       if (isParticipating) {
-        try {
-          // 1. Generate invitation (checks for duplicates automatically)
-          await InvitationService.autoGenerateForEvent(eventId);
-          
-          // 2. Dispatch email in background
-          setImmediate(() => {
-            InvitationEmailService.sendInvitations(eventId).catch(err => {
-              console.error('[RE-INCLUDE-BG] Email dispatch failed:', err);
-            });
-          });
-        } catch (invErr) {
-          console.error('[RE-INCLUDE] Post-inclusion automation failed:', invErr);
-        }
+        await this._generateAndQueueInvitationEmails(eventId, 'RE-INCLUDE');
       }
 
       return { success: true, action };
@@ -732,11 +930,12 @@ const PeopleService = {
    * Search database securely for Participation Filtering step.
    * Maps Guests data to Student schema identifiers gracefully.
    */
-  async searchPeoplePreview(searchTerm, typeName = 'graduate') {
-    const isGuest = typeName.toLowerCase().includes('guest');
+  async searchPeoplePreview(searchTerm, typeIdentifier = null) {
+    const typeMeta = await this._getPeopleTypeMeta({ typeId: typeIdentifier, typeName: typeIdentifier });
+    const strategy = await this._getTypeStrategy(typeMeta);
     const term = `%${searchTerm}%`;
 
-    if (isGuest) {
+    if (strategy === 'guest') {
       const query = `
         SELECT guest_id AS student_id, guest_name AS full_name, phone, email 
         FROM guests 
@@ -745,7 +944,9 @@ const PeopleService = {
       `;
       const result = await db.query(query, [term]);
       return result.rows;
-    } else {
+    }
+
+    if (strategy === 'student') {
       const query = `
         SELECT student_id, full_name, phone, email 
         FROM students 
@@ -755,19 +956,21 @@ const PeopleService = {
       const result = await db.query(query, [term]);
       return result.rows;
     }
+
+    return [];
   },
 
   /**
    * Specialized import for Guests.
    * Performs dynamic mapping and links records to event participation.
    */
-  async importGuests(eventId, mapping, filePath, confirmCapacity = false) {
-    if (Object.keys(mapping).length === 0) {
+  async importGuests(eventId, mapping, dataOrPath, confirmCapacity = false, isPath = true, typeId = null) {
+    if (mapping && Object.keys(mapping).length === 0) {
       return { totalRows: 0, insertedGuests: 0, addedToEvent: 0 };
     }
 
-    const rows = this._readFileAsJson(filePath);
-    if (!rows.length) return { totalRows: 0, insertedGuests: 0, addedToEvent: 0 };
+    const rows = isPath ? this._readFileAsJson(dataOrPath) : dataOrPath;
+    if (!rows || !rows.length) return { totalRows: 0, insertedGuests: 0, addedToEvent: 0 };
 
     const client = await db.pool.connect();
     const summary = {
@@ -796,6 +999,7 @@ const PeopleService = {
       let remaining = capacityLimit - currentCount;
 
       const getVal = (row, dbColumn) => {
+        if (!mapping) return row[dbColumn];
         const excelHeader = Object.keys(mapping).find(k => mapping[k] === dbColumn);
         return excelHeader ? String(row[excelHeader] || '').trim() : undefined;
       };
@@ -811,9 +1015,11 @@ const PeopleService = {
         };
       }
 
-      // 3. Resolve Guest Type ID
-      const typeRes = await client.query("SELECT id FROM people_types WHERE type_name = 'Guests' LIMIT 1");
-      const guestTypeId = typeRes.rows[0]?.id;
+      // 3. Resolve participant type from DB metadata
+      const typeMeta = typeId
+        ? await this._getPeopleTypeMeta({ typeId }, client)
+        : await this._getPeopleTypeMeta({ tableName: 'guests' }, client);
+      const guestTypeId = typeMeta.id;
 
       // 4. Fetch existing participants
       const currentParticipantsRes = await client.query(
@@ -881,6 +1087,28 @@ const PeopleService = {
     } finally {
       client.release();
     }
+  },
+
+  /**
+   * Manual registration of people.
+   * Reuses the import logic but accepts direct data.
+   */
+  async manualRegister(eventId, typeName, peopleData, confirmCapacity = false, typeId = null) {
+    const result = await this.importByType({
+      eventId,
+      typeId,
+      typeName,
+      mapping: null,
+      dataOrPath: peopleData,
+      confirmCapacity,
+      isPath: false
+    });
+
+    if (result.status !== 'capacity_exceeded' && (result.addedToEvent || 0) > 0) {
+      result.invitations = await this._generateAndQueueInvitationEmails(eventId, 'MANUAL-REGISTER');
+    }
+
+    return result;
   }
 };
 

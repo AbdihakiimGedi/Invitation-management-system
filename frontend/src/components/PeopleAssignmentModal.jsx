@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import AlertModal from './AlertModal';
 import ConfirmModal from './ConfirmModal';
 import { peopleService, eventModelService } from '../services/api';
-import seatService from '../services/seatService';
-import SeatDefinitionForm from './SeatDefinitionForm';
+import ManualRegistrationForm from './ManualRegistrationForm';
 
 const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
   const [step, setStep] = useState(1);
+  const [assignmentMode, setAssignmentMode] = useState(null); // 'upload' | 'manual'
   const [loading, setLoading] = useState(false);
   
   // Selection States
@@ -33,10 +33,6 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredData, setFilteredData] = useState(null);
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, type: 'primary', title: '', message: '', onConfirm: null });
-  const [showSeatForm, setShowSeatForm] = useState(false);
-
-  // Seating States
-  const [seatingStatus, setSeatingStatus] = useState({ checked: false, initialized: false });
 
   const navigate = useNavigate();
 
@@ -59,6 +55,7 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
     } else {
       // Reset state on close
       setStep(1);
+      setAssignmentMode(null);
       setFile(null);
       setSelectedEventId('');
       setSelectedTypeId('');
@@ -66,45 +63,15 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
       setMapping({});
       setImportedStudents([]);
       setExclusions([]);
-      setSeatingStatus({ checked: false, initialized: false });
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (selectedEventId) {
-      checkSeating();
-    }
-  }, [selectedEventId]);
-
-  const checkSeating = async () => {
-    try {
-      const groups = await seatService.getGroups(selectedEventId);
-      setSeatingStatus({ checked: true, initialized: groups.length > 0 });
-    } catch (error) {
-      setSeatingStatus({ checked: true, initialized: false });
-    }
-  };
-
-  const handleInitializeSeating = async (groups) => {
-    setLoading(true);
-    try {
-      await seatService.initializeSeats(selectedEventId, groups);
-      showAlert('success', 'Seating architecture finalized successfully.');
-      setSeatingStatus({ checked: true, initialized: true });
-      setShowSeatForm(false);
-    } catch (error) {
-      showAlert('error', error.message || 'Failed to initialize seating.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const showAlert = (type, message) => {
     setAlertConfig({ isOpen: true, type, message });
   };
 
    useEffect(() => {
-    if (step !== 4) {
+    if (step !== 5) {
       setSearchTerm('');
       setFilteredData(null);
     }
@@ -115,7 +82,7 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
       if (searchTerm) {
         try {
           const type = peopleTypes.find(t => t.id === selectedTypeId);
-          const results = await peopleService.searchPreview(searchTerm, type?.type_name || 'student');
+          const results = await peopleService.searchPreview(searchTerm, type?.id);
           setFilteredData(results);
         } catch (error) {
           console.error("Search failed", error);
@@ -129,27 +96,18 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
   }, [searchTerm, selectedTypeId]);
 
   const isStudentType = () => {
-     const type = peopleTypes.find(t => t.id === selectedTypeId);
-     if (!type) return false;
-     const name = type.type_name.toLowerCase();
-     return name.includes('student') || name.includes('graduate');
+     const columns = new Set(schemaFields.map(f => f.column));
+     return columns.has('student_id') && columns.has('full_name');
    };
 
    const isGuestType = () => {
-     const type = peopleTypes.find(t => t.id === selectedTypeId);
-     if (!type) return false;
-     const name = type.type_name.toLowerCase();
-     return name.includes('guest');
+     const columns = new Set(schemaFields.map(f => f.column));
+     return columns.has('guest_id') && columns.has('guest_name');
    };
 
-  const proceedToUpload = async () => {
+  const proceedToChoiceScreen = async () => {
     if (!selectedEventId || !selectedTypeId) {
       showAlert('error', 'Selection required to continue.');
-      return;
-    }
-
-    if (!seatingStatus.initialized) {
-      showAlert('error', 'Seating must be initialized for this event before assigning participants.');
       return;
     }
 
@@ -162,9 +120,62 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
         return;
       }
       setSchemaFields(schema);
-      setStep(2);
+      setStep(2); // Step 2 is now the Choice Screen
     } catch (err) {
       showAlert('error', 'Failed to synchronize table schema.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const proceedToUpload = () => {
+    setAssignmentMode('upload');
+    setStep(3); // Step 3 is the file upload screen
+  };
+
+  const proceedToManual = () => {
+    setAssignmentMode('manual');
+    setStep(3); // Step 3 is also the manual form screen
+  };
+
+  const handleManualRegistered = (result, stagedEntries) => {
+    if (result.status === 'capacity_exceeded') {
+      setConfirmConfig({
+        isOpen: true,
+        type: 'primary',
+        title: 'Capacity Threshold Exceeded',
+        message: `The entries exceed available venue slots. Only ${result.remainingCapacity} participants can be added. Proceed anyway?`,
+        onConfirm: () => handleManualRegisteredConfirmed(stagedEntries)
+      });
+      return;
+    }
+
+    // Map result data for the Participation Filtering step (Step 5)
+    const normalized = stagedEntries.map((entry, idx) => ({
+      student_id: entry.student_id || String(idx + 1),
+      full_name: entry.full_name || entry.guest_name || `Entry ${idx + 1}`
+    }));
+    setImportedStudents(normalized);
+    setExclusions([]);
+    setImportSummary(result);
+    setStep(isStudentType() || isGuestType() ? 5 : 6);
+  };
+
+  const handleManualRegisteredConfirmed = async (stagedEntries) => {
+    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+    setLoading(true);
+    try {
+      const type = peopleTypes.find(t => t.id === selectedTypeId);
+      const result = await peopleService.manualRegister({
+        eventId: selectedEventId,
+        typeId: selectedTypeId,
+        typeName: type.type_name,
+        data: stagedEntries,
+        confirmCapacity: true
+      });
+      handleManualRegistered(result, stagedEntries);
+    } catch (err) {
+      showAlert('error', err.message || 'Manual registration failed.');
     } finally {
       setLoading(false);
     }
@@ -193,7 +204,7 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
         if (schemaMatch) initialMapping[h] = schemaMatch.column;
       });
       setMapping(initialMapping);
-      setStep(3);
+      setStep(4); // Step 4 = Column Mapping (upload path only)
     } catch (err) {
       showAlert('error', 'Manifest parsing failed. Invalid format.');
     } finally {
@@ -210,6 +221,7 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
       const result = await peopleService.importPeople({
         tableName: type.table_name,
         eventId: selectedEventId,
+        typeId: selectedTypeId,
         mapping: mapping,
         filePath: serverFilePath,
         typeName: type.type_name,
@@ -247,7 +259,7 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
         setExclusions(autoExclusions);
         setImportedStudents(normalized);
         setImportSummary(result);
-        setStep(4);
+        setStep(5); // Step 5 = Participation Filtering
       } else if (isGuestType()) {
         const nameKey = Object.keys(mapping).find(k => mapping[k] === 'guest_name');
         const normalized = result.data.map((row, idx) => ({
@@ -256,10 +268,10 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
         }));
         setImportedStudents(normalized);
         setImportSummary(result);
-        setStep(4);
+        setStep(5); // Step 5 = Participation Filtering
       } else {
         setImportSummary(result);
-        setStep(5);
+        setStep(6); // Step 6 = Success
       }
     } catch (err) {
       console.error('Import Error Details:', err);
@@ -287,10 +299,11 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
             eventId: selectedEventId,
             studentData: importedStudents, // Original manifest defines the scope
             exclusions: exclusions,
+            typeId: selectedTypeId,
             typeName: type?.type_name
           });
           showAlert('success', 'Success! Registry manifest has been successfully authorized and synchronized.');
-          setStep(5);
+          setStep(6); // Step 6 = Success
         } catch (err) {
           showAlert('error', err.message || 'Communication failure during finalization.');
         } finally {
@@ -338,8 +351,25 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
   if (!isOpen) return null;
 
   const isAdvanced = isStudentType() || isGuestType();
-  const totalSteps = isAdvanced ? 5 : 4;
-  const currentStepLabel = step > totalSteps ? totalSteps : step;
+  const isUploadMode = assignmentMode === 'upload';
+
+  // Display step mapping:
+  // Upload path (steps 1,2,3,4,5,6) maps to display (1,1,2,3,4,5)
+  // Manual path (steps 1,2,3,5,6) maps to display (1,1,2,3,4)
+  const getDisplayStep = () => {
+    if (step <= 2) return 1;
+    if (isUploadMode || assignmentMode === null) return step - 1;
+    // Manual: step 3 maps to 2, step 5 maps to 3, step 6 maps to 4
+    if (step === 3) return 2;
+    if (step === 5) return 3;
+    if (step === 6) return 4;
+    return step - 1;
+  };
+  const totalSteps = isAdvanced
+    ? (isUploadMode ? 5 : 4)
+    : (isUploadMode ? 4 : 3);
+  const displayStep = getDisplayStep();
+  const currentStepLabel = Math.min(displayStep, totalSteps);
   const typeLabel = peopleTypes.find(t => t.id === selectedTypeId)?.type_name || 'People';
 
   return (
@@ -366,7 +396,7 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
           {Array.from({ length: totalSteps }).map((_, i) => (
             <div key={i+1} className="flex flex-col items-center relative z-10">
               <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-sm transition-all shadow-lg ${
-                step >= i+1 ? 'bg-primary-600 text-white shadow-primary-600/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                currentStepLabel >= i+1 ? 'bg-primary-600 text-white shadow-primary-600/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
               }`}>
                 {i+1}
               </div>
@@ -374,7 +404,7 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
           ))}
           <div className="absolute top-1/2 left-0 h-0.5 bg-slate-100 dark:bg-slate-800 w-full z-0 px-20"></div>
           <div className="absolute top-1/2 left-0 h-0.5 bg-primary-600 transition-all duration-700 z-0 px-20 transform -translate-y-1/2 ml-20" 
-               style={{ width: `${Math.max(0, ((step - 1) / (totalSteps - 1)) * 75)}%` }}></div>
+               style={{ width: `${Math.max(0, ((currentStepLabel - 1) / (totalSteps - 1)) * 75)}%` }}></div>
         </div>
 
         <div className="overflow-y-auto px-12 pb-12 custom-scrollbar">
@@ -391,35 +421,14 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
                   {events.map(ev => <option key={ev.id} value={ev.id}>{ev.event_name}</option>)}
                 </select>
 
-                {selectedEventId && seatingStatus.checked && (
-                  <div className={`mt-4 p-5 rounded-2xl border transition-all duration-500 ${
-                    seatingStatus.initialized 
-                      ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30' 
-                      : 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30'
-                  }`}>
-                    {showSeatForm ? (
-                      <SeatDefinitionForm 
-                        onSave={handleInitializeSeating}
-                        onCancel={() => setShowSeatForm(false)}
-                        isProcessing={loading}
-                      />
-                    ) : (
-                      <div className="flex items-center justify-between animate-in fade-in slide-in-from-top-2">
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-2 h-2 rounded-full ${seatingStatus.initialized ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'}`}></div>
-                          <span className={`text-[0.65rem] font-black uppercase tracking-widest ${seatingStatus.initialized ? 'text-emerald-600' : 'text-amber-600'}`}>
-                            Seating Architecture: {seatingStatus.initialized ? 'Initialized' : 'Pending Configuration'}
-                          </span>
-                        </div>
-                        <button 
-                          onClick={() => setShowSeatForm(true)}
-                          disabled={loading}
-                          className="px-4 py-2 bg-amber-600 text-white text-[0.6rem] font-black uppercase tracking-widest rounded-xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-600/20 active:scale-95 disabled:opacity-50"
-                        >
-                          {seatingStatus.initialized ? 'Modify Architecture' : 'Define Seats Now'}
-                        </button>
-                      </div>
-                    )}
+                {selectedEventId && (
+                  <div className="mt-4 p-5 rounded-2xl border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                      <span className="text-[0.65rem] font-black uppercase tracking-widest text-emerald-600">
+                        Unified flow: classification, seat grouping, invitations, and email are handled on final authorization
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -443,13 +452,68 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
                 </div>
               </div>
 
-              <button onClick={proceedToUpload} disabled={loading} className="w-full btn-primary py-5 text-sm uppercase tracking-widest shadow-xl shadow-primary-600/10">
-                {loading ? 'Processing...' : 'Authorize & Synchronize manifest'}
+              <button onClick={proceedToChoiceScreen} disabled={loading} className="w-full btn-primary py-5 text-sm uppercase tracking-widest shadow-xl shadow-primary-600/10">
+                {loading ? 'Processing...' : 'Authorize & Continue'}
               </button>
             </div>
           )}
 
+          {/* STEP 2: Choice Screen */}
           {step === 2 && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <div className="text-center">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white uppercase italic tracking-tighter">Select Assignment Method</h3>
+                <p className="text-slate-400 font-bold text-[0.65rem] uppercase tracking-widest mt-2">How would you like to assign participants to this event?</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Option A: Upload File */}
+                <button
+                  onClick={proceedToUpload}
+                  className="group relative flex flex-col items-center gap-5 p-8 rounded-[2rem] border-2 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:border-primary-500 hover:shadow-xl hover:shadow-primary-600/10 transition-all text-left active:scale-95"
+                >
+                  <div className="w-16 h-16 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 group-hover:bg-primary-600 group-hover:border-primary-500 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-primary-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div className="text-center">
+                    <span className="block text-base font-black uppercase italic tracking-tighter text-slate-900 dark:text-white mb-1">Upload File</span>
+                    <span className="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Excel / CSV bulk import</span>
+                  </div>
+                  <span className="absolute top-4 right-4 px-2 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 text-[0.5rem] font-black uppercase tracking-widest rounded-full border border-emerald-100 dark:border-emerald-900/30">
+                    Existing Flow
+                  </span>
+                </button>
+
+                {/* Option B: Register New */}
+                <button
+                  onClick={proceedToManual}
+                  className="group relative flex flex-col items-center gap-5 p-8 rounded-[2rem] border-2 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:border-primary-500 hover:shadow-xl hover:shadow-primary-600/10 transition-all text-left active:scale-95"
+                >
+                  <div className="w-16 h-16 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 group-hover:bg-primary-600 group-hover:border-primary-500 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-primary-600 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                  <div className="text-center">
+                    <span className="block text-base font-black uppercase italic tracking-tighter text-slate-900 dark:text-white mb-1">Register New</span>
+                    <span className="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Manual entry via form</span>
+                  </div>
+                  <span className="absolute top-4 right-4 px-2 py-1 bg-primary-50 dark:bg-primary-900/20 text-primary-600 text-[0.5rem] font-black uppercase tracking-widest rounded-full border border-primary-100 dark:border-primary-900/30">
+                    New
+                  </span>
+                </button>
+              </div>
+
+              <button onClick={() => setStep(1)} className="w-full text-primary-600 font-bold text-[0.65rem] uppercase tracking-widest underline underline-offset-8 decoration-primary-500/30">
+                Back to Selection
+              </button>
+            </div>
+          )}
+
+          {/* STEP 3A: Upload File */}
+          {step === 3 && assignmentMode === 'upload' && (
             <div className="text-center space-y-10 animate-in zoom-in-95">
                <div className="w-24 h-24 bg-slate-50 dark:bg-slate-900 rounded-[2rem] mx-auto flex items-center justify-center border-2 border-dashed border-slate-200 dark:border-slate-800">
                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -466,11 +530,24 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
                    {loading ? 'Analyzing Manifest...' : 'Access Local File'}
                  </div>
                </label>
-               <button onClick={() => setStep(1)} className="text-primary-600 font-bold text-[0.65rem] uppercase tracking-widest underline underline-offset-8 decoration-primary-500/30">Reset Selection</button>
+               <button onClick={() => setStep(2)} className="text-primary-600 font-bold text-[0.65rem] uppercase tracking-widest underline underline-offset-8 decoration-primary-500/30">Back to Choice</button>
             </div>
           )}
 
-          {step === 3 && (
+          {/* STEP 3B: Register New */}
+          {step === 3 && assignmentMode === 'manual' && (
+            <ManualRegistrationForm
+              schemaFields={schemaFields}
+              typeName={peopleTypes.find(t => t.id === selectedTypeId)?.type_name || ''}
+              typeId={selectedTypeId}
+              eventId={selectedEventId}
+              onRegistered={handleManualRegistered}
+              onBack={() => setStep(2)}
+            />
+          )}
+
+          {/* STEP 4: Column Mapping */}
+          {step === 4 && assignmentMode === 'upload' && (
             <div className="animate-in fade-in">
                <div className="flex justify-between items-center mb-8 px-2">
                  <div className="flex items-center gap-3">
@@ -515,12 +592,12 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
                  })}
                </div>
                <div className="flex space-x-4">
-                 <button onClick={() => setStep(2)} className="flex-1 btn-secondary text-[0.65rem] uppercase text-slate-400">Change Manifest</button>
+                 <button onClick={() => setStep(3)} className="flex-1 btn-secondary text-[0.65rem] uppercase text-slate-400">Change Manifest</button>
                  {(() => {
                    const missing = schemaFields.filter(f => f.required && !Object.values(mapping).includes(f.column));
                    const isValid = missing.length === 0 && Object.keys(mapping).length > 0;
-                   return (
-                     <button onClick={() => runImport()} disabled={loading || !isValid} className="flex-2 btn-primary py-5 px-10 text-[0.65rem] uppercase tracking-widest shadow-xl shadow-primary-600/10">
+                    return (
+                      <button id="btn-run-import" onClick={() => runImport()} disabled={loading || !isValid} className="flex-2 btn-primary py-5 px-10 text-[0.65rem] uppercase tracking-widest shadow-xl shadow-primary-600/10">
                         {loading ? 'Processing...' : 'Initialize Synchronization'}
                      </button>
                    );
@@ -529,7 +606,8 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
             </div>
           )}
 
-          {step === 4 && (
+          {/* STEP 5: Participation Filtering */}
+          {step === 5 && (
             <div className="animate-in fade-in">
               <div className="mb-8 flex justify-between items-end">
                 <div>
@@ -614,7 +692,7 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
               </div>
 
               <div className="flex space-x-4">
-                <button onClick={() => setStep(3)} className="flex-1 btn-secondary text-[0.65rem] uppercase">Back to Mapping</button>
+                <button onClick={() => assignmentMode === 'upload' ? setStep(4) : setStep(3)} className="flex-1 btn-secondary text-[0.65rem] uppercase">Back to Mapping</button>
                 <button onClick={finalizeParticipation} disabled={loading} className="flex-2 btn-primary py-5 px-10 text-[0.65rem] uppercase tracking-widest">
                   {loading ? 'Storing manifest...' : 'Authorize Registry Entry'}
                 </button>
@@ -622,7 +700,8 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
             </div>
           )}
 
-          {step === 5 && (
+          {/* STEP 6: Success */}
+          {step === 6 && (
             <div className="animate-in zoom-in duration-700">
                <div className="text-center mb-10">
                   <div className="w-24 h-24 bg-emerald-50 dark:bg-emerald-900/20 rounded-full mx-auto flex items-center justify-center mb-6 shadow-sm border border-emerald-100">
@@ -707,4 +786,3 @@ const PeopleAssignmentModal = ({ isOpen, onClose, user }) => {
 };
 
 export default PeopleAssignmentModal;
-

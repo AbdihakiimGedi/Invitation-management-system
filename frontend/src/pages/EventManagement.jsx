@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AdminHeader from '../components/AdminHeader';
 import EventModal from '../components/EventModal';
 import AssignPeopleModal from '../components/AssignPeopleModal';
@@ -24,10 +24,19 @@ const EventManagement = ({ user, setIsSidebarOpen }) => {
   const [alertConfig, setAlertConfig] = useState({ isOpen: false, type: 'success', message: '' });
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, type: 'primary', title: '', message: '', onConfirm: null });
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchEvents();
   }, []);
+
+  useEffect(() => {
+    if (location.state?.openCreateEvent) {
+      setSelectedEvent(null);
+      setIsModalOpen(true);
+      navigate('/admin/events', { replace: true, state: {} });
+    }
+  }, [location.state, navigate]);
 
   const fetchEvents = async () => {
     try {

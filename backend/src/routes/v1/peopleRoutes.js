@@ -28,11 +28,14 @@ const upload = multer({ storage: storage });
 
 // Admin-only routes
 router.get('/types', authMiddleware, roleMiddleware(['Admin']), PeopleController.listTypes);
+router.get('/lookup/:tableName', authMiddleware, roleMiddleware(['Admin']), PeopleController.getLookupData);
+router.get('/departments/by-faculty/:facultyId', authMiddleware, roleMiddleware(['Admin']), PeopleController.getDepartmentsByFaculty);
 router.get('/columns/:tableName', authMiddleware, roleMiddleware(['Admin']), PeopleController.listColumns);
 router.get('/schema/:tableName', authMiddleware, roleMiddleware(['Admin']), PeopleController.getMappingSchema);
 router.get('/preview', authMiddleware, roleMiddleware(['Admin']), PeopleController.searchPreview);
 router.post('/upload-preview', authMiddleware, roleMiddleware(['Admin']), upload.single('file'), PeopleController.uploadPreview);
 router.post('/import', authMiddleware, roleMiddleware(['Admin']), PeopleController.processImport);
+router.post('/manual-register', authMiddleware, roleMiddleware(['Admin']), PeopleController.manualRegister);
 router.post('/process-participation', authMiddleware, roleMiddleware(['Admin']), PeopleController.finalizeParticipation);
 router.patch('/participation', authMiddleware, roleMiddleware(['Admin']), PeopleController.updateParticipationStatus);
 

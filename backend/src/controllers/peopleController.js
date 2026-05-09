@@ -17,6 +17,37 @@ const PeopleController = {
   },
 
   /**
+   * GET /api/v1/people/lookup/:tableName
+   */
+  async getLookupData(req, res) {
+    try {
+      const { tableName } = req.params;
+      const filters = req.query; // Captures ?faculty_id=...
+      const data = await PeopleService.getLookupData(tableName, filters);
+      return sendSuccess(res, data, `Lookup data for ${tableName} retrieved successfully`);
+    } catch (error) {
+      return sendError(res, error.message || `Failed to fetch lookup data for ${tableName}`, 500);
+    }
+  },
+
+  /**
+   * GET /api/v1/people/departments/by-faculty/:facultyId
+   */
+  async getDepartmentsByFaculty(req, res) {
+    try {
+      const { facultyId } = req.params;
+      console.log(`[DEBUG] Controller getDepartmentsByFaculty for facultyId: ${facultyId}`);
+      if (!facultyId) {
+        return sendError(res, 'Faculty ID is required', 400);
+      }
+      const data = await PeopleService.getLookupData('departments', { faculty_id: facultyId });
+      return sendSuccess(res, data, `Departments for faculty ${facultyId} retrieved successfully`);
+    } catch (error) {
+      return sendError(res, error.message || 'Failed to fetch departments by faculty', 500);
+    }
+  },
+
+  /**
    * GET /api/v1/people/columns/:tableName
    */
   async listColumns(req, res) {
@@ -83,7 +114,7 @@ const PeopleController = {
    */
   async processImport(req, res) {
     try {
-      const { tableName, eventId, mapping, filePath, typeName, confirmCapacity } = req.body;
+      const { tableName, eventId, mapping, filePath, typeName, typeId, confirmCapacity } = req.body;
       if (!tableName || !eventId || !mapping || !filePath) {
         return sendError(res, 'Missing required import parameters', 400);
       }
@@ -91,17 +122,16 @@ const PeopleController = {
       // STRICT NORMALIZATION: Ensure confirmCapacity is a boolean (default: false)
       const isConfirmed = confirmCapacity === true || confirmCapacity === 'true';
 
-      let result;
-      const tName = (tableName || '').toLowerCase();
-      const tTypeName = (typeName || '').toLowerCase();
-
-      if (tName === 'students' || tTypeName.includes('student') || tTypeName.includes('graduate')) {
-        result = await PeopleService.importStudents(eventId, mapping, filePath, isConfirmed);
-      } else if (tName === 'guests' || tTypeName.includes('guest')) {
-        result = await PeopleService.importGuests(eventId, mapping, filePath, isConfirmed);
-      } else {
-        result = await PeopleService.importPeople(tableName, eventId, mapping, filePath);
-      }
+      const result = await PeopleService.importByType({
+        eventId,
+        typeId,
+        typeName,
+        tableName,
+        mapping,
+        dataOrPath: filePath,
+        confirmCapacity: isConfirmed,
+        isPath: true
+      });
       
       // Handle Capacity Interruption (Special Status)
       if (result.status === 'capacity_exceeded') {
@@ -117,17 +147,42 @@ const PeopleController = {
   },
 
   /**
+   * POST /api/v1/people/manual-register
+   */
+  async manualRegister(req, res) {
+    try {
+      const { eventId, typeName, typeId, data, confirmCapacity } = req.body;
+      if (!eventId || (!typeId && !typeName) || !data || !Array.isArray(data)) {
+        return sendError(res, 'Missing required parameters for manual registration', 400);
+      }
+
+      const isConfirmed = confirmCapacity === true || confirmCapacity === 'true';
+      const result = await PeopleService.manualRegister(eventId, typeName, data, isConfirmed, typeId);
+
+      if (result.status === 'capacity_exceeded') {
+        return sendSuccess(res, result, 'Threshold exceeded. Awaiting confirmation.');
+      }
+
+      const count = result.addedToEvent || result.insertedStudents || result.insertedGuests || 0;
+      return sendSuccess(res, result, `Successfully registered ${count} participants manually`);
+    } catch (error) {
+      console.error('Manual Register Controller Error:', error);
+      return sendError(res, error.message || 'Manual registration failed', 500);
+    }
+  },
+
+  /**
    * POST /api/v1/people/process-participation
    */
   async finalizeParticipation(req, res) {
     try {
-      const { eventId, studentData, exclusions, typeName } = req.body;
+      const { eventId, studentData, exclusions, typeName, typeId } = req.body;
       
       if (!eventId || !studentData) {
         return sendError(res, 'Event ID and Student Data are required', 400);
       }
 
-      const result = await PeopleService.processParticipation(eventId, studentData, exclusions || [], typeName);
+      const result = await PeopleService.processParticipation(eventId, studentData, exclusions || [], typeName, typeId);
       return sendSuccess(res, result, 'Event participation finalized successfully');
     } catch (error) {
       return sendError(res, error.message || 'Participation processing failed', 500);

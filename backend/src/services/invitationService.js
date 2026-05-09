@@ -2,6 +2,7 @@ const InvitationModel = require('../models/invitationModel');
 const InvitationBatchModel = require('../models/invitationBatchModel');
 const SeatModel = require('../models/seatModel');
 const CommunicationService = require('./communicationService');
+const InvitationManagementService = require('./invitationManagementService');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 const db = require('../config/database');
@@ -45,7 +46,7 @@ const InvitationService = {
 
       // 3. Fetch all eligible participants for this event
       const participantsRes = await db.query(
-        "SELECT ep.eventparticipant_id, ep.user_id, s.full_name, s.email, e.event_name, e.location as event_location, e.event_date FROM event_participants ep JOIN students s ON ep.user_id = s.student_id JOIN events e ON ep.event_id = e.id WHERE ep.event_id = $1 AND ep.status = 'eligible'",
+        "SELECT ep.eventparticipant_id, ep.user_id, s.full_name, s.email, s.phone, e.event_name, e.location as event_location, e.event_date FROM event_participants ep JOIN students s ON ep.user_id = s.student_id JOIN events e ON ep.event_id = e.id WHERE ep.event_id = $1 AND ep.status = 'eligible'",
         [batch.event_id]
       );
       const participants = participantsRes.rows;
@@ -58,6 +59,7 @@ const InvitationService = {
 
       // 4. Process each person and assign a seat
       let processed = 0;
+      let blocked = 0;
       const qtyPerPerson = batch.qty_per_person || 1;
 
       for (let i = 0; i < participants.length; i++) {
@@ -65,6 +67,7 @@ const InvitationService = {
         const seat = availableSeats[i]; // Sequential assignment from pool
 
         try {
+          await InvitationManagementService.assertCapacity(batch.event_id, qtyPerPerson);
           const generatedTokens = [];
           
           for (let j = 0; j < qtyPerPerson; j++) {
@@ -111,30 +114,35 @@ const InvitationService = {
             );
           }
 
-          if (task.person.phone) {
-            const waMessage = `Hello ${task.person.full_name},
+          if (person.phone) {
+            const waMessage = `Hello ${person.full_name},
 
-You are officially invited to the graduation ceremony.
+You are officially invited to the  ceremony.
 
-📌 Event: ${task.person.event_name}
-📍 Location: ${eventLocation}
+Event: ${person.event_name}
+Location: ${person.event_location || 'TBD'}
 📅 Date: ${formattedDate}
 ⏰ Time: ${formattedTime}
-🪑 Seat Group: ${task.groupName}`;
+Seat Group: ${seat.zone}`;
 
             await CommunicationService.sendWhatsApp(
-              task.person.phone, 
+              person.phone, 
               waMessage, 
               { qrTokens: generatedTokens }
             );
           }
 
           processed++;
-          if (processed % 5 === 0 || processed === tasks.length) {
+          if (processed % 5 === 0 || processed + blocked === participants.length) {
             await InvitationBatchModel.updateProgress(batch.id, processed);
           }
         } catch (err) {
-          console.error(`Failed to process invitation for ${task.person.user_id}:`, err);
+          if (err.statusCode === 409) {
+            blocked++;
+            console.warn(`[INVITATION] Blocked ${person.user_id}: Event capacity is full. No more invitations are available for this event.`);
+            continue;
+          }
+          console.error(`Failed to process invitation for ${person.user_id}:`, err);
         }
       }
 
@@ -157,54 +165,85 @@ You are officially invited to the graduation ceremony.
   async autoGenerateForEvent(eventId, client = db) {
     console.log(`[INVITATION] Auto-generating invitations for Event: ${eventId}`);
     
-    // Step 1: Strict Seat Verification (Check for groups)
-    const groupCheck = await client.query('SELECT COUNT(*) FROM seat_groups WHERE event_id = $1', [eventId]);
-    if (parseInt(groupCheck.rows[0].count) === 0) {
-      throw new Error("Seats must be created before generating invitations.");
+    // Step 1: The Assign People flow owns classification, logical groups, and
+    // physical seat availability. This removes the old manual pre-step.
+    await SeatModel.ensureUnifiedAssignmentFlow(eventId, client);
+    const startingCapacity = await InvitationManagementService.getCapacity(eventId, client);
+    if (startingCapacity.remaining_invitations === 0) {
+      return {
+        count: 0,
+        blocked: 0,
+        message: 'Event capacity is full. No more invitations are available for this event.',
+        capacity: startingCapacity
+      };
     }
 
-    // Step 2: Fetch Available Seats
-    const availableSeatsRes = await client.query(
-      "SELECT id FROM seats WHERE event_id = $1 AND status = 'Available' ORDER BY zone, id",
-      [eventId]
-    );
-    const availableSeats = availableSeatsRes.rows;
-
-    // Step 3: Fetch Participants who need invitations
+    // Step 2: Fetch Participants who need invitations with their resolved group.
     const participantsRes = await client.query(`
-      SELECT ep.eventparticipant_id 
+      SELECT
+        ep.eventparticipant_id,
+        sa.seat_group_id,
+        sg.name AS seat_group_name
       FROM event_participants ep 
+      JOIN seat_assignments sa
+        ON sa.eventparticipant_id = ep.eventparticipant_id
+       AND sa.event_id = ep.event_id
+      JOIN seat_groups sg ON sg.id = sa.seat_group_id
       WHERE ep.event_id = $1 
         AND ep.status = 'eligible'
         AND NOT EXISTS (SELECT 1 FROM invitations i WHERE i.eventparticipant_id = ep.eventparticipant_id)
-      ORDER BY ep.eventparticipant_id
+      ORDER BY sg.name, ep.eventparticipant_id
     `, [eventId]);
     const participants = participantsRes.rows;
 
     if (participants.length === 0) return { count: 0 };
-
-    if (participants.length > availableSeats.length) {
-      throw new Error(`Insufficient seats. Required: ${participants.length}, Available: ${availableSeats.length}. Please define more seats.`);
-    }
+    const allowedCount = startingCapacity.remaining_invitations === null
+      ? participants.length
+      : Math.min(participants.length, startingCapacity.remaining_invitations);
+    const participantsToInvite = participants.slice(0, allowedCount);
+    const blockedCount = participants.length - participantsToInvite.length;
 
     // Step 4: Atomic Assignment & Creation
     let createdCount = 0;
-    for (let i = 0; i < participants.length; i++) {
-      const epId = participants[i].eventparticipant_id;
-      const seatId = availableSeats[i].id;
+    for (let i = 0; i < participantsToInvite.length; i++) {
+      const participant = participantsToInvite[i];
+      const epId = participant.eventparticipant_id;
+      await InvitationManagementService.assertCapacity(eventId, 1, client);
+      const seatRes = await client.query(`
+        SELECT id
+        FROM seats
+        WHERE event_id = $1
+          AND zone = $2
+          AND status = 'Available'
+        ORDER BY seat_number, id
+        LIMIT 1
+      `, [eventId, participant.seat_group_name]);
+
+      if (seatRes.rowCount === 0) {
+        throw new Error(`No available seats in ${participant.seat_group_name}.`);
+      }
+
+      const seatId = seatRes.rows[0].id;
       const token = crypto.randomBytes(32).toString('hex');
 
       await client.query(`
-        INSERT INTO invitations (id, event_id, eventparticipant_id, seat_id, qr_token, quantity, status, comm_status)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, 1, 'ACTIVE', 'PENDING')
-      `, [eventId, epId, seatId, token]);
+        INSERT INTO invitations (id, event_id, eventparticipant_id, seat_id, seat_group_id, qr_token, quantity, status, comm_status)
+        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 1, 'ACTIVE', 'PENDING')
+      `, [eventId, epId, seatId, participant.seat_group_id, token]);
 
       await client.query("UPDATE seats SET status = 'Occupied' WHERE id = $1", [seatId]);
       createdCount++;
     }
 
     console.log(`[INVITATION] Created ${createdCount} new invitations for event ${eventId}`);
-    return { count: createdCount };
+    return {
+      count: createdCount,
+      blocked: blockedCount,
+      message: blockedCount > 0
+        ? 'Event capacity is full. No more invitations are available for this event.'
+        : undefined,
+      capacity: await InvitationManagementService.getCapacity(eventId, client)
+    };
   }
 };
 

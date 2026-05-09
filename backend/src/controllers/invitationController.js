@@ -1,5 +1,8 @@
 const InvitationBatchModel = require('../models/invitationBatchModel');
 const InvitationModel = require('../models/invitationModel');
+const QRCodeService = require('../services/qrcodeService');
+const InvitationManagementService = require('../services/invitationManagementService');
+const ActivityLogService = require('../services/activityLogService');
 
 const InvitationController = {
   /**
@@ -41,6 +44,157 @@ const InvitationController = {
     }
   },
 
+  async getManagementEvents(req, res) {
+    try {
+      const events = await InvitationManagementService.listEvents();
+      res.json({ status: 'success', data: events });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getSentParticipants(req, res) {
+    try {
+      const data = await InvitationManagementService.listSentParticipants(req.params.eventId);
+      res.json({ status: 'success', data });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async resendParticipantInvitation(req, res) {
+    try {
+      const data = await InvitationManagementService.resendParticipantInvitation(
+        req.params.eventId,
+        req.params.eventParticipantId
+      );
+      await ActivityLogService.log({
+        actorUserId: req.user.id,
+        actionType: 'INVITATION_RESENT',
+        entityType: 'event_participants',
+        entityId: req.params.eventParticipantId,
+        description: `Invitation resent for participant ID: ${req.params.eventParticipantId}`,
+        metadata: { event_id: req.params.eventId }
+      });
+      res.json({ status: 'success', data, message: 'Invitation resend processed successfully' });
+    } catch (error) {
+      res.status(error.statusCode || 500).json({
+        error: error.message,
+        data: error.capacity ? { capacity: error.capacity } : undefined
+      });
+    }
+  },
+
+  async createMoreInvitationRequest(req, res) {
+    try {
+      const request = await InvitationManagementService.createRequest(req.user.id, req.body);
+      res.status(201).json({ status: 'success', data: request, message: 'Invitation request submitted successfully' });
+    } catch (error) {
+      res.status(error.statusCode || 500).json({ error: error.message });
+    }
+  },
+
+  async getMoreInvitationRequests(req, res) {
+    try {
+      const requests = await InvitationManagementService.listRequests(req.params.eventId);
+      res.json({ status: 'success', data: requests });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getMoreInvitationRequestDetails(req, res) {
+    try {
+      const request = await InvitationManagementService.getRequestDetails(req.params.requestId);
+      if (!request) return res.status(404).json({ error: 'Invitation request not found' });
+      res.json({ status: 'success', data: request });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async approveMoreInvitationRequest(req, res) {
+    try {
+      const data = await InvitationManagementService.approveRequest(req.params.requestId, req.user.id);
+      await ActivityLogService.log({
+        actorUserId: req.user.id,
+        actionType: 'INVITATION_REQUEST_APPROVED',
+        entityType: 'invitation_requests',
+        entityId: req.params.requestId,
+        description: `Invitation request approved: ${req.params.requestId}`
+      });
+      res.json({ status: 'success', data, message: data.message });
+    } catch (error) {
+      res.status(error.statusCode || 500).json({ error: error.message });
+    }
+  },
+
+  async getMyInvitations(req, res) {
+    try {
+      const invitations = await InvitationModel.getForUser(req.user.id);
+      const enriched = await Promise.all(invitations.map(async (invitation) => ({
+        ...invitation,
+        qr_code: invitation.qr_token ? await QRCodeService.generateQRCode(invitation.qr_token) : null
+      })));
+      res.json({ status: 'success', data: enriched });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getMyInvitation(req, res) {
+    try {
+      const invitation = await InvitationModel.getForUserById(req.user.id, req.params.invitationId);
+      if (!invitation) {
+        return res.status(404).json({ error: 'Invitation not found' });
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          ...invitation,
+          qr_code: invitation.qr_token ? await QRCodeService.generateQRCode(invitation.qr_token) : null
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getMyEvents(req, res) {
+    try {
+      const events = await InvitationModel.getEventsForUser(req.user.id);
+      res.json({
+        status: 'success',
+        data: {
+          full_name: events[0]?.full_name || null,
+          events
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getMyEventInvitation(req, res) {
+    try {
+      const invitation = await InvitationModel.getForUserByEvent(req.user.id, req.params.eventId);
+      if (!invitation) {
+        return res.status(404).json({ error: 'Invitation not found for this event' });
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          ...invitation,
+          qr_code: invitation.qr_token ? await QRCodeService.generateQRCode(invitation.qr_token) : null
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   /**
    * Triggers seating initialization for the event.
    * This prepares the seat_assignments needed for invitation generation.
@@ -59,17 +213,14 @@ const InvitationController = {
       }
 
       // If no groups provided, we check if seats ALREADY exist (Verification mode)
-      const existingGroups = await SeatModel.getSeatGroupsByEvent(event_id);
-      if (existingGroups.length === 0) {
-        return res.status(400).json({ 
-          error: 'Seats must be created before generating invitations. Please use the Seat Management panel to define your seating architecture.' 
-        });
-      }
+      const result = await SeatModel.ensureUnifiedAssignmentFlow(event_id);
 
       res.json({
         success: true,
-        message: 'Seating architecture verified.',
-        groups_count: existingGroups.length
+        message: 'Unified assignment seating verified.',
+        groups_count: result.groups,
+        assignments_count: result.assignments,
+        seats_created: result.seatsCreated
       });
     } catch (error) {
       console.error('[INVITATION-CTRL] Seating initialization error:', error);

@@ -9,7 +9,7 @@ const AuthController = {
         return res.status(400).json({ error: 'Username and password are required' });
       }
 
-      const { user, token } = await AuthService.login(username, password);
+      const { user, token, redirect_path } = await AuthService.login(username, password);
 
       // Return role to the frontend for navigation handling
       // Optionally, token could be set in an HTTP-only cookie here
@@ -17,7 +17,8 @@ const AuthController = {
         message: 'Login successful',
         user,
         token,
-        role: user.role // Explicitly returning role as requested for frontend navigation
+        role: user.role,
+        redirect_path
       });
 
     } catch (error) {

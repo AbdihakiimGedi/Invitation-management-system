@@ -13,6 +13,14 @@ import ManageSeats from './pages/ManageSeats';
 import SeatAssignment from './pages/SeatAssignment';
 import AssignedSeatGroups from './pages/AssignedSeatGroups';
 import InvitationScanner from './pages/InvitationScanner';
+import ParticipantLists from './pages/ParticipantLists';
+import ParticipantDirectory from './pages/ParticipantDirectory';
+import SentInvitations from './pages/SentInvitations';
+import InvitationRequests from './pages/InvitationRequests';
+import AttendancePortal from './pages/AttendancePortal';
+import UserManagement from './pages/UserManagement';
+import EventReports from './pages/EventReports';
+import SystemLogs from './pages/SystemLogs';
 
 function App() {
   return (
@@ -80,10 +88,98 @@ function App() {
             } 
           />
           <Route 
+            path="/admin/participant-lists" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <AdminLayout>
+                  <ParticipantLists />
+                </AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/participants/:typeSlug" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <AdminLayout>
+                  <ParticipantDirectory />
+                </AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/invitations/sent" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <AdminLayout>
+                  <SentInvitations />
+                </AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/invitations/requests" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <AdminLayout>
+                  <InvitationRequests />
+                </AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
             path="/admin/terminal" 
             element={
               <ProtectedRoute allowedRoles={['Admin']}>
                 <InvitationScanner />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/attendance" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <AdminLayout>
+                  <AttendancePortal />
+                </AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/users" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <AdminLayout>
+                  <UserManagement />
+                </AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/reports/events" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <AdminLayout>
+                  <EventReports />
+                </AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/settings/logs" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <AdminLayout>
+                  <SystemLogs />
+                </AdminLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/attendance" 
+            element={
+              <ProtectedRoute allowedRoles={['Attendance Staff', 'Admin']}>
+                <AttendancePortal />
               </ProtectedRoute>
             } 
           />

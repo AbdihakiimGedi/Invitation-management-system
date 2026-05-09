@@ -13,6 +13,135 @@ const GPA_MAPPING = [
 ];
 
 const SeatModel = {
+  getGpaLabel(gpaValue) {
+    const gpa = parseFloat(gpaValue || 0);
+    const category = GPA_MAPPING.find(m => gpa >= m.min && gpa <= m.max);
+    return category ? category.label : 'F';
+  },
+
+  async ensureUnifiedAssignmentFlow(eventId, client = db) {
+    const participantsRes = await client.query(`
+      SELECT
+        ep.eventparticipant_id,
+        ep.user_id,
+        pt.type_name,
+        pt.table_name,
+        s.gpa
+      FROM event_participants ep
+      JOIN people_types pt ON ep.type_id = pt.id
+      LEFT JOIN students s ON ep.user_id = s.student_id
+      WHERE ep.event_id = $1
+        AND ep.status = 'eligible'
+      ORDER BY
+        CASE WHEN pt.table_name = 'students' THEN 0 ELSE 1 END,
+        s.gpa DESC NULLS LAST,
+        ep.eventparticipant_id ASC
+    `, [eventId]);
+
+    const participants = participantsRes.rows;
+    if (participants.length === 0) {
+      return { participants: 0, groups: 0, assignments: 0, seatsCreated: 0 };
+    }
+
+    const groupsRes = await client.query(
+      'SELECT id, name, target_type FROM seat_groups WHERE event_id = $1',
+      [eventId]
+    );
+
+    const groupsByName = new Map(groupsRes.rows.map(g => [g.name.toLowerCase(), g]));
+    const ensureGroup = async (name, targetType, description) => {
+      const key = name.toLowerCase();
+      if (groupsByName.has(key)) return groupsByName.get(key);
+
+      const inserted = await client.query(`
+        INSERT INTO seat_groups (event_id, name, target_type, description)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, name, target_type
+      `, [eventId, name, targetType, description]);
+
+      const group = inserted.rows[0];
+      groupsByName.set(key, group);
+      return group;
+    };
+
+    const desiredAssignments = [];
+    for (const participant of participants) {
+      const usesStudentRecord = participant.table_name === 'students';
+      const grade = usesStudentRecord ? this.getGpaLabel(participant.gpa) : null;
+      const groupName = usesStudentRecord
+        ? `${grade} ${participant.type_name}`
+        : `${participant.type_name} Registry`;
+      const targetType = usesStudentRecord ? 'Student' : 'Guest';
+      const description = usesStudentRecord
+        ? `Auto-managed assignment group for ${grade} GPA graduates.`
+        : `Auto-managed assignment group for ${participant.type_name}.`;
+      const group = await ensureGroup(groupName, targetType, description);
+
+      desiredAssignments.push({
+        eventparticipant_id: participant.eventparticipant_id,
+        seat_group_id: group.id,
+        group_name: group.name,
+        target_type: group.target_type
+      });
+    }
+
+    if (desiredAssignments.length > 0) {
+      await client.query(
+        'DELETE FROM seat_assignments WHERE event_id = $1 AND eventparticipant_id = ANY($2::int[])',
+        [eventId, desiredAssignments.map(a => a.eventparticipant_id)]
+      );
+
+      await client.query(`
+        INSERT INTO seat_assignments (event_id, seat_group_id, eventparticipant_id)
+        SELECT $1, unnest($2::uuid[]), unnest($3::int[])
+      `, [
+        eventId,
+        desiredAssignments.map(a => a.seat_group_id),
+        desiredAssignments.map(a => a.eventparticipant_id)
+      ]);
+    }
+
+    const neededSeatsRes = await client.query(`
+      SELECT
+        sg.id,
+        sg.name,
+        sg.target_type,
+        COUNT(DISTINCT sa.id) FILTER (WHERE i.id IS NULL)::int AS pending_invitation_count,
+        COUNT(DISTINCT se.id) FILTER (WHERE se.status = 'Available')::int AS available_count,
+        COUNT(DISTINCT se.id)::int AS existing_count
+      FROM seat_groups sg
+      JOIN seat_assignments sa ON sa.seat_group_id = sg.id AND sa.event_id = sg.event_id
+      LEFT JOIN invitations i ON i.eventparticipant_id = sa.eventparticipant_id
+      LEFT JOIN seats se ON se.event_id = sg.event_id AND se.zone = sg.name
+      WHERE sg.event_id = $1
+      GROUP BY sg.id, sg.name, sg.target_type
+    `, [eventId]);
+
+    let seatsCreated = 0;
+    for (const group of neededSeatsRes.rows) {
+      const deficit = Math.max(0, group.pending_invitation_count - group.available_count);
+      for (let i = 1; i <= deficit; i++) {
+        const seatNumber = `S-${group.existing_count + i}`;
+        const category = group.target_type === 'Student'
+          ? 'Graduate'
+          : (group.target_type === 'Guest' ? 'Guest' : 'VIP');
+
+        await client.query(`
+          INSERT INTO seats (event_id, zone, seat_number, category_type, status)
+          VALUES ($1, $2, $3, $4, 'Available')
+        `, [eventId, group.name, seatNumber, category]);
+        seatsCreated++;
+      }
+    }
+
+    return {
+      participants: participants.length,
+      groups: groupsByName.size,
+      assignments: desiredAssignments.length,
+      seatsCreated
+    };
+  },
+
   // --- Seat Groups ---
   async createSeatGroup(groupData) {
     const { event_id, name, target_type, description } = groupData;
@@ -66,12 +195,11 @@ const SeatModel = {
         sa.seat_group_id,
         sg.name as seat_group_name
       FROM event_participants ep
+      JOIN people_types pt ON ep.type_id = pt.id
       JOIN students s ON ep.user_id = s.student_id
       LEFT JOIN seat_assignments sa ON ep.eventparticipant_id = sa.eventparticipant_id AND ep.event_id = sa.event_id
       LEFT JOIN seat_groups sg ON sa.seat_group_id = sg.id
-      WHERE ep.event_id = $1 AND ep.status = 'eligible' AND ep.type_id IN (
-        SELECT id FROM people_types WHERE type_name = 'Graduates'
-      )
+      WHERE ep.event_id = $1 AND ep.status = 'eligible' AND pt.table_name = 'students'
     `;
     const res = await db.query(query, [eventId]);
     const students = res.rows;
@@ -107,12 +235,11 @@ const SeatModel = {
         sa.seat_group_id,
         sg.name as seat_group_name
       FROM event_participants ep
+      JOIN people_types pt ON ep.type_id = pt.id
       JOIN guests g ON ep.guest_ref_id = g.guest_id
       LEFT JOIN seat_assignments sa ON ep.eventparticipant_id = sa.eventparticipant_id AND ep.event_id = sa.event_id
       LEFT JOIN seat_groups sg ON sa.seat_group_id = sg.id
-      WHERE ep.event_id = $1 AND ep.status = 'eligible' AND ep.type_id IN (
-        SELECT id FROM people_types WHERE type_name = 'Guests'
-      )
+      WHERE ep.event_id = $1 AND ep.status = 'eligible' AND pt.table_name = 'guests'
     `;
     const res = await db.query(query, [eventId]);
     return res.rows;
@@ -173,10 +300,11 @@ const SeatModel = {
       const findParticipantsQuery = `
         SELECT ep.eventparticipant_id
         FROM event_participants ep
+        JOIN people_types pt ON ep.type_id = pt.id
         JOIN students s ON ep.user_id = s.student_id
         WHERE ep.event_id = $1 
           AND ep.status = 'eligible'
-          AND ep.type_id IN (SELECT id FROM people_types WHERE type_name = 'Graduates')
+          AND pt.table_name = 'students'
           AND (${conditions})
       `;
 
@@ -258,8 +386,8 @@ const SeatModel = {
       FROM seat_assignments sa
       JOIN event_participants ep ON sa.eventparticipant_id = ep.eventparticipant_id
       JOIN people_types pt ON ep.type_id = pt.id
-      LEFT JOIN students s ON ep.user_id = s.student_id AND pt.type_name = 'Graduates'
-      LEFT JOIN guests g ON ep.guest_ref_id = g.guest_id AND pt.type_name = 'Guests'
+      LEFT JOIN students s ON ep.user_id = s.student_id AND pt.table_name = 'students'
+      LEFT JOIN guests g ON ep.guest_ref_id = g.guest_id AND pt.table_name = 'guests'
       WHERE sa.event_id = $1 AND sa.seat_group_id = $2
       ORDER BY full_name ASC
     `;
@@ -285,8 +413,8 @@ const SeatModel = {
       JOIN event_participants ep ON sa.eventparticipant_id = ep.eventparticipant_id
       JOIN events e ON ep.event_id = e.id
       JOIN people_types pt ON ep.type_id = pt.id
-      LEFT JOIN students s ON ep.user_id = s.student_id AND pt.type_name = 'Graduates'
-      LEFT JOIN guests g ON ep.guest_ref_id = g.guest_id AND pt.type_name = 'Guests'
+      LEFT JOIN students s ON ep.user_id = s.student_id AND pt.table_name = 'students'
+      LEFT JOIN guests g ON ep.guest_ref_id = g.guest_id AND pt.table_name = 'guests'
       WHERE sg.event_id = $1
       ORDER BY sg.id, full_name
     `;

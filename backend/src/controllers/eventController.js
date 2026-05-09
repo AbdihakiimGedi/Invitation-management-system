@@ -1,5 +1,6 @@
 const EventService = require('../services/eventService');
 const { sendSuccess, sendError } = require('../utils/responseFormatter');
+const ActivityLogService = require('../services/activityLogService');
 
 const EventController = {
   async list(req, res) {
@@ -36,6 +37,14 @@ const EventController = {
     try {
       const eventData = { ...req.body, created_by: req.user?.id };
       const newEvent = await EventService.createEvent(eventData);
+      await ActivityLogService.log({
+        actorUserId: req.user.id,
+        actionType: 'EVENT_CREATED',
+        entityType: 'events',
+        entityId: newEvent.id,
+        description: `Event created: ${newEvent.event_name}`,
+        metadata: { event_date: newEvent.event_date }
+      });
       return sendSuccess(res, newEvent, 'Event created successfully', 201);
     } catch (error) {
       const statusCode = error.message.includes('required') ? 400 : 500;
@@ -46,6 +55,13 @@ const EventController = {
   async update(req, res) {
     try {
       const updatedEvent = await EventService.updateEvent(req.params.id, req.body);
+      await ActivityLogService.log({
+        actorUserId: req.user.id,
+        actionType: 'EVENT_UPDATED',
+        entityType: 'events',
+        entityId: req.params.id,
+        description: `Event updated: ${updatedEvent.event_name}`
+      });
       return sendSuccess(res, updatedEvent, 'Event updated successfully');
     } catch (error) {
       const statusCode = error.message === 'Event not found' ? 404 : 500;
@@ -56,6 +72,13 @@ const EventController = {
   async delete(req, res) {
     try {
       await EventService.removeEvent(req.params.id);
+      await ActivityLogService.log({
+        actorUserId: req.user.id,
+        actionType: 'EVENT_DELETED',
+        entityType: 'events',
+        entityId: req.params.id,
+        description: `Event deleted: ID ${req.params.id}`
+      });
       return sendSuccess(res, null, 'Event deleted successfully');
     } catch (error) {
       const statusCode = error.message === 'Event not found' ? 404 : 500;

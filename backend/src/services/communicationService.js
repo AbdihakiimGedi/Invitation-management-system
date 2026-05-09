@@ -21,12 +21,18 @@ function createTransporter() {
   });
 }
 
+function singularizeTypeName(typeName) {
+  const label = String(typeName || 'Guest').trim();
+  return label.endsWith('s') ? label.slice(0, -1) : label;
+}
+
 /**
  * Generates the invitation e
  * mail HTML body.
  */
-function buildEmailHTML({ fullName, eventName, groupName, qrTokens, qty, eventLocation, eventDate, eventTime, seatNumber }) {
+function buildEmailHTML({ fullName, eventName, groupName, qrTokens, qty, eventLocation, eventDate, eventTime, participantTypeName, portalCredential }) {
   const tokens = Array.isArray(qrTokens) ? qrTokens : (qrTokens ? [qrTokens] : []);
+  const invitationLabel = singularizeTypeName(participantTypeName);
 
   const qrSectionsHtml = tokens.map((token, idx) => `
           <div class="qr-section">
@@ -62,12 +68,12 @@ function buildEmailHTML({ fullName, eventName, groupName, qrTokens, qty, eventLo
     <body>
       <div class="container">
         <div class="header">
-          <h1>🎓 Graduation Invitation</h1>
+          <h1>${invitationLabel} Invitation</h1>
           <p>${eventName}</p>
         </div>
         <div class="body">
           <p class="greeting">Hello ${fullName},</p>
-          <p style="color:#555;">You are officially invited to the graduation ceremony.</p>
+          <p style="color:#555;">You are officially invited as ${invitationLabel}.</p>
           
           <div class="info-box">
             <p>📌 <strong>Event:</strong> ${eventName}</p>
@@ -75,8 +81,11 @@ function buildEmailHTML({ fullName, eventName, groupName, qrTokens, qty, eventLo
             <p>📅 <strong>Date:</strong> ${eventDate}</p>
             <p>⏰ <strong>Time:</strong> ${eventTime}</p>
             <p>🪑 <strong>Seat Group:</strong> ${groupName}</p>
-            <p>🎟 <strong>Seat Number:</strong> <span style="font-size: 18px; color: #1a1a2e;">${seatNumber || 'Unassigned'}</span></p>
             ${qty > 1 ? `<p>🎟 <strong>Tickets:</strong> ${qty} individual entry QR codes below</p>` : ''}
+            ${portalCredential ? `
+              <p><strong>Portal Username:</strong> ${portalCredential.username}</p>
+              <p><strong>Portal Password:</strong> ${portalCredential.password}</p>
+            ` : ''}
           </div>
 
           ${qrSectionsHtml}
@@ -93,6 +102,37 @@ function buildEmailHTML({ fullName, eventName, groupName, qrTokens, qty, eventLo
 }
 
 const CommunicationService = {
+  async sendNotification(to, subject, message) {
+    if (!to) return false;
+
+    const transporter = createTransporter();
+    if (!transporter) {
+      console.log(`[MAIL-MOCK] Would notify ${to}: ${subject} - ${message}`);
+      console.warn('[MAIL] Email not configured. Set EMAIL_USER and EMAIL_PASS in .env to send real emails.');
+      return false;
+    }
+
+    try {
+      const fromName = process.env.EMAIL_FROM_NAME || 'Developing Team Group 36';
+      const fromEmail = process.env.EMAIL_USER;
+      await transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to,
+        subject,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:30px auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+            <h2 style="margin-top:0;color:#111827;">${subject}</h2>
+            <p style="color:#374151;line-height:1.6;">${message}</p>
+          </div>
+        `
+      });
+      return true;
+    } catch (err) {
+      console.error(`[MAIL] Failed to send notification to ${to}:`, err.message);
+      return false;
+    }
+  },
+
   /**
    * Sends a real invitation email with the QR code embedded.
    */
@@ -124,7 +164,7 @@ const CommunicationService = {
         });
       }
 
-      const fromName = process.env.EMAIL_FROM_NAME || 'Graduation Ceremony';
+      const fromName = process.env.EMAIL_FROM_NAME || 'Developing Team Group 36';
       const fromEmail = process.env.EMAIL_USER;
 
       await transporter.sendMail({
@@ -133,14 +173,15 @@ const CommunicationService = {
         subject,
         html: buildEmailHTML({
           fullName: data.fullName || subject,
-          eventName: data.eventName || 'Graduation Ceremony',
+          eventName: data.eventName || 'Cremony Inviattion',
           groupName: data.groupName || 'General',
           qrTokens: tokens,
           qty: data.qty || 1,
           eventLocation: data.eventLocation || 'TBD',
           eventDate: data.eventDate || 'TBD',
           eventTime: data.eventTime || 'TBD',
-          seatNumber: data.seatNumber || 'TBD',
+          participantTypeName: data.participantTypeName,
+          portalCredential: data.portalCredential,
         }),
         attachments,
       });

@@ -1,77 +1,91 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 
+const Icons = {
+  calendar: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  ),
+  users: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+  ),
+  mail: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  ),
+  chart: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  ),
+  settings: (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  )
+};
+
+const MENU_SECTIONS = [
+  {
+    title: 'Overview',
+    icon: 'chart',
+    children: [
+      { title: 'Command Center', path: '/admin' }
+    ]
+  },
+  {
+    title: 'Event Management',
+    icon: 'calendar',
+    children: [
+      { title: 'Events List', path: '/admin/events' },
+      { title: 'Assign People', action: 'assignPeople' }
+    ]
+  },
+  {
+    title: 'Participants',
+    icon: 'users',
+    children: [
+      { title: 'Graduates', path: '/admin/participants/graduates' },
+      { title: 'Guests', path: '/admin/participants/guests' },
+      { title: 'VIP Guests', path: '/admin/participants/vip_guests' }
+    ]
+  },
+  {
+    title: 'Invitations',
+    icon: 'mail',
+    children: [
+      { title: 'Sent Invitations', path: '/admin/invitations/sent' },
+      { title: 'Invitation Requests', path: '/admin/invitations/requests' }
+    ]
+  },
+  {
+    title: 'Intelligence',
+    icon: 'chart',
+    children: [
+      { title: 'Attendance Portal', path: '/admin/attendance' },
+      { title: 'Event Analytics', path: '/admin/reports/events' }
+    ]
+  },
+  {
+    title: 'Administration',
+    icon: 'settings',
+    children: [
+      { title: 'User Management', path: '/admin/users' },
+      { title: 'System Logs', path: '/admin/settings/logs' }
+    ]
+  }
+];
+
 const AdminSidebar = ({ isOpen, setIsOpen, user, handleLogout, onOpenAssignPeople }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [expandedMenus, setExpandedMenus] = useState([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
-
-  const menuItems = [
-    {
-      title: 'Analytics',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      ),
-      children: [
-        { title: 'Overview', path: '/admin' }
-      ]
-    },
-    {
-      title: 'Events',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      ),
-      children: [
-        { title: 'All Events', path: '/admin/events' },
-        { title: 'Assign People', onClick: onOpenAssignPeople }
-      ]
-    },
-    {
-      title: 'Directories',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-        </svg>
-      ),
-      children: [
-        { title: 'Graduates', path: '/admin/graduates' },
-        { title: 'Guests', path: '/admin/guests' },
-        { title: 'VIPs', path: '/admin/vips' }
-      ]
-    },
-    {
-      title: 'Communication',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
-      ),
-      children: [
-        { title: 'All Invitations', path: '/admin/invitations' },
-        { title: 'QR Code Engine', path: '/admin/qr-codes' }
-      ]
-    },
-    {
-      title: 'Operations',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      ),
-      children: [
-        { title: 'Manage Seat Groups', path: '/admin/seats' },
-        { title: 'Assign People (Seats)', path: '/admin/assign-seats' },
-        { title: 'Assigned Seat Groups', path: '/admin/assigned-seat-groups' },
-        { title: 'Entry Terminal', path: '/admin/terminal' }
-      ]
-    }
-  ];
 
   useEffect(() => {
     const isDark = document.documentElement.classList.contains('dark');
@@ -87,7 +101,7 @@ const AdminSidebar = ({ isOpen, setIsOpen, user, handleLogout, onOpenAssignPeopl
 
   useEffect(() => {
     const currentPath = location.pathname;
-    const parentToExpand = menuItems.find(item => 
+    const parentToExpand = MENU_SECTIONS.find(item => 
       item.children?.some(child => child.path === currentPath)
     );
     if (parentToExpand && !expandedMenus.includes(parentToExpand.title)) {
@@ -103,6 +117,15 @@ const AdminSidebar = ({ isOpen, setIsOpen, user, handleLogout, onOpenAssignPeopl
 
   const isActive = (path) => location.pathname === path;
   const isParentActive = (item) => item.children?.some(child => isActive(child.path));
+
+  const handleMenuAction = (child) => {
+    if (child.action === 'assignPeople') {
+      onOpenAssignPeople?.();
+    } else if (child.path) {
+      navigate(child.path, child.state ? { state: child.state } : undefined);
+    }
+    setIsOpen(false);
+  };
 
   return (
     <>
@@ -155,12 +178,12 @@ const AdminSidebar = ({ isOpen, setIsOpen, user, handleLogout, onOpenAssignPeopl
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 custom-scrollbar">
-          {menuItems.map((menu, idx) => {
+          {MENU_SECTIONS.map((menu) => {
             const isExpanded = expandedMenus.includes(menu.title);
             const parentActive = isParentActive(menu);
 
             return (
-              <div key={idx} className="space-y-1">
+              <div key={menu.title} className="space-y-1">
                 <button
                   onClick={() => toggleMenu(menu.title)}
                   className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all duration-300 group ${
@@ -171,7 +194,7 @@ const AdminSidebar = ({ isOpen, setIsOpen, user, handleLogout, onOpenAssignPeopl
                 >
                   <div className="flex items-center space-x-3.5">
                     <span className={`${parentActive ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'} transition-colors`}>
-                      {menu.icon}
+                      {Icons[menu.icon]}
                     </span>
                     <span className="text-[13px] font-bold tracking-tight">
                       {menu.title}
@@ -190,14 +213,10 @@ const AdminSidebar = ({ isOpen, setIsOpen, user, handleLogout, onOpenAssignPeopl
                     isExpanded ? 'max-h-[500px] mt-1.5 opacity-100' : 'max-h-0 opacity-0'
                   }`}
                 >
-                  {menu.children.map((child, cIdx) => (
+                  {menu.children.map((child) => (
                     <button
-                      key={cIdx}
-                      onClick={() => {
-                        if (child.onClick) child.onClick();
-                        else navigate(child.path);
-                        setIsOpen(false);
-                      }}
+                      key={`${menu.title}-${child.title}`}
+                      onClick={() => handleMenuAction(child)}
                       className={`w-full flex items-center space-x-3 px-10 py-2.5 rounded-xl text-[12px] font-bold tracking-tight transition-all duration-200 ${
                         isActive(child.path)
                           ? 'text-primary-600 dark:text-primary-400 bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700'
@@ -231,4 +250,3 @@ const AdminSidebar = ({ isOpen, setIsOpen, user, handleLogout, onOpenAssignPeopl
 };
 
 export default AdminSidebar;
-

@@ -1,6 +1,18 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const UserModel = require('../models/userModel');
+const ActivityLogService = require('./activityLogService');
+
+const getRedirectPath = (role) => {
+  const paths = {
+    Admin: '/admin',
+    Graduate: '/graduate',
+    Guest: '/guest',
+    'Special Guest': '/vip',
+    'Attendance Staff': '/attendance'
+  };
+  return paths[role] || '/';
+};
 
 const AuthService = {
   async login(username, password) {
@@ -39,7 +51,15 @@ const AuthService = {
       created_at: user.created_at,
     };
 
-    return { user: safeUser, token };
+    await ActivityLogService.log({
+      actorUserId: user.id,
+      actionType: 'USER_LOGIN',
+      entityType: 'users',
+      entityId: user.id,
+      description: `User login: ${user.username}`
+    });
+
+    return { user: safeUser, token, redirect_path: getRedirectPath(user.role) };
   }
 };
 

@@ -110,18 +110,18 @@ const SeatController = {
       // Check for Target Type mismatch if the zone is restricted
       if (group.target_type !== 'Both') {
         const typeCheck = await db.query(`
-          SELECT DISTINCT pt.type_name
+          SELECT DISTINCT pt.table_name
           FROM event_participants ep
           JOIN people_types pt ON ep.type_id = pt.id
           WHERE ep.eventparticipant_id = ANY($1::int[])
         `, [sanitizedIds]);
 
-        const types = typeCheck.rows.map(r => r.type_name);
+        const tables = typeCheck.rows.map(r => r.table_name);
         
-        if (group.target_type === 'Student' && types.some(t => t !== 'Graduates')) {
+        if (group.target_type === 'Student' && tables.some(t => t !== 'students')) {
           return sendError(res, `Assignment failed: The zone "${group.name}" is restricted to graduates only.`, 400);
         }
-        if (group.target_type === 'Guest' && types.some(t => t !== 'Guests')) {
+        if (group.target_type === 'Guest' && tables.some(t => t !== 'guests')) {
           return sendError(res, `Assignment failed: The zone "${group.name}" is restricted to guests only.`, 400);
         }
       }

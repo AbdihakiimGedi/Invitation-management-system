@@ -24,12 +24,7 @@ const LoginPage = () => {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      const { role } = data.user;
-      if (role === 'Admin') navigate('/admin');
-      else if (role === 'Graduate') navigate('/graduate');
-      else if (role === 'Guest') navigate('/guest');
-      else if (role === 'Special Guest') navigate('/vip');
-      else navigate('/');
+      navigate(data.redirect_path || '/');
     } catch (err) {
       const errorMessage =
         err.response?.data?.message ||
