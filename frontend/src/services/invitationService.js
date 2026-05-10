@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api/v1/invitations';
+const API_URL = 'http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io/api/v1/invitations';
 
 const invitationService = {
   getBatches: async (eventId) => {

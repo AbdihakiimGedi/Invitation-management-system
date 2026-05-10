@@ -28,7 +28,7 @@ export function getApiBaseUrl() {
     return `http://${lanHost}:${BACKEND_PORT}`;
   }
 
-  return `http://localhost:${BACKEND_PORT}`;
+  return `http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io`;
 }
 
 function buildQuery(params?: ApiRecord) {
