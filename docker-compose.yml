@@ -31,7 +31,7 @@ services:
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       DB_NAME: ${POSTGRES_DB:-Digital Invitation & Attendance Management}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_SECRET: ${JWT_SECRET:-${SERVICE_BASE64_64_JWT_SECRET:?JWT_SECRET is required}}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io}
       JSON_BODY_LIMIT: ${JSON_BODY_LIMIT:-1mb}
