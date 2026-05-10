@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+app/node_modules/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+app/.env
+app/.env.*
+!app/.env.example
+
+# Build output and caches
+dist/
+frontend/dist/
+app/.expo/
+app/dist/
+app/web-build/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Runtime files
+logs/
+*.log
+backend/uploads/
+uploads/
+
+# Local database backups and sensitive exports
+digital_invitation_backup.sql
+database/backups/
+*.dump
+*.backup
+dataabse.sql
+databse.sql
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local spreadsheets and lock/temp office files
+*.xlsx
+~$*
+
+# Local scratch scripts
+check_roles.js
