@@ -1,6 +1,11 @@
 const db = require('../config/database');
 
 const typeSlugSql = "LOWER(REGEXP_REPLACE(type_name, '[^a-zA-Z0-9]+', '_', 'g'))";
+const typeSlugAliases = {
+  graduate: ['graduate', 'graduates', 'student', 'students'],
+  guest: ['guest', 'guests'],
+  vip_guest: ['vip_guest', 'vip_guests', 'vip', 'special_guest', 'special_guests'],
+};
 const loginUsernameSql = `
   CASE
     WHEN pt.table_name = 'students' THEN ep.user_id
@@ -25,6 +30,28 @@ const buildSearchFilter = (search, params) => {
 };
 
 const ParticipantDirectoryModel = {
+  normalizeTypeSlug(typeSlug) {
+    return String(typeSlug || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  },
+
+  getTypeSlugCandidates(typeSlug) {
+    const normalized = this.normalizeTypeSlug(typeSlug);
+    const candidates = new Set([normalized]);
+
+    Object.entries(typeSlugAliases).forEach(([canonical, aliases]) => {
+      if (canonical === normalized || aliases.includes(normalized)) {
+        candidates.add(canonical);
+        aliases.forEach((alias) => candidates.add(alias));
+      }
+    });
+
+    return [...candidates].filter(Boolean);
+  },
+
   async hasColumn(tableName, columnName) {
     const result = await db.query(
       `
@@ -72,6 +99,7 @@ const ParticipantDirectoryModel = {
   },
 
   async getTypeBySlug(typeSlug) {
+    const slugCandidates = this.getTypeSlugCandidates(typeSlug);
     const query = `
       SELECT
         id,
@@ -79,10 +107,10 @@ const ParticipantDirectoryModel = {
         table_name,
         ${typeSlugSql} AS type_key
       FROM people_types
-      WHERE ${typeSlugSql} = $1
+      WHERE ${typeSlugSql} = ANY($1::text[])
       LIMIT 1
     `;
-    const result = await db.query(query, [typeSlug]);
+    const result = await db.query(query, [slugCandidates]);
     return result.rows[0];
   },
 

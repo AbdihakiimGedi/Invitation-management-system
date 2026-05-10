@@ -1,5 +1,6 @@
 import { adminRequest, ApiRecord } from '@/services/admin-api';
 import { clearAuthSession, requireStoredRole } from '@/services/auth-session';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
@@ -11,10 +12,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+type ThemeMode = 'light' | 'dark';
+
+const THEME_STORAGE_KEY = 'attendanceStaffTheme';
 
 function asArray(value: unknown): ApiRecord[] {
   if (Array.isArray(value)) return value as ApiRecord[];
@@ -55,8 +59,8 @@ export default function QrScannerScreen() {
   const [attendanceList, setAttendanceList] = useState<ApiRecord[]>([]);
   const [popup, setPopup] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
-  const isDark = useColorScheme() === 'dark';
-  const theme = isDark ? darkTheme : lightTheme;
+  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+  const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
   const selectedEvent = useMemo(
     () => events.find((event) => pickId(event) === eventId),
@@ -98,6 +102,16 @@ export default function QrScannerScreen() {
 
   useEffect(() => {
     void requireStoredRole(['Admin', 'Attendance Staff']);
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(THEME_STORAGE_KEY)
+      .then((storedTheme) => {
+        if (storedTheme === 'dark' || storedTheme === 'light') {
+          setThemeMode(storedTheme);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -187,7 +201,10 @@ export default function QrScannerScreen() {
     }
     if (!permission?.granted) {
       const nextPermission = await requestPermission();
-      if (!nextPermission.granted) return;
+      if (!nextPermission.granted) {
+        setPopup({ type: 'error', text: 'Camera permission is required to scan QR codes.' });
+        return;
+      }
     }
     setMessage('');
     setError('');
@@ -195,6 +212,12 @@ export default function QrScannerScreen() {
     setQrToken('');
     setIsScanned(false);
     setCameraActive(true);
+  };
+
+  const toggleTheme = async () => {
+    const nextTheme = themeMode === 'dark' ? 'light' : 'dark';
+    setThemeMode(nextTheme);
+    await AsyncStorage.setItem(THEME_STORAGE_KEY, nextTheme);
   };
 
   const closeScanner = () => {
@@ -251,6 +274,9 @@ export default function QrScannerScreen() {
         <Pressable style={styles.logoutButton} onPress={logout}>
           <Ionicons name="log-out-outline" size={20} color="#be123c" />
         </Pressable>
+        <Pressable style={[styles.iconButton, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={toggleTheme}>
+          <Ionicons name={themeMode === 'dark' ? 'moon' : 'sunny'} size={20} color={theme.text} />
+        </Pressable>
       </View>
 
       <View style={[styles.eventPanel, { backgroundColor: theme.screen }]}>
@@ -280,7 +306,9 @@ export default function QrScannerScreen() {
         <View style={styles.cameraShell}>
           {eventId ? (
             <CameraView
+              active={cameraActive}
               barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              facing="back"
               onBarcodeScanned={isScanned ? undefined : handleScan}
               style={styles.camera}
             />

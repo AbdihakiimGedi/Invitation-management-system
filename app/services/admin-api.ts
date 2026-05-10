@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const REQUEST_TIMEOUT_MS = 15000;
-const API_BASE_URL = 'http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io';
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  'http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io';
 
 export type ApiRecord = Record<string, unknown>;
 

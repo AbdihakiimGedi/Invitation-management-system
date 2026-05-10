@@ -123,6 +123,28 @@ async function runMigrations() {
       CONSTRAINT event_participants_status_check CHECK (status = ANY(ARRAY['eligible','rejected']))
     );
 
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'unique_user_event'
+          AND conrelid = 'public.event_participants'::regclass
+      ) THEN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM public.event_participants
+          GROUP BY user_id, event_id
+          HAVING COUNT(*) > 1
+        ) THEN
+          ALTER TABLE public.event_participants
+            ADD CONSTRAINT unique_user_event UNIQUE (user_id, event_id);
+        ELSE
+          RAISE NOTICE 'Skipped unique_user_event constraint because duplicate event_participants rows exist.';
+        END IF;
+      END IF;
+    END $$;
+
     -- ── Seats ────────────────────────────────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS public.seats (
       id            UUID      DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,

@@ -26,11 +26,17 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 5000
+      DATABASE_URL: ${DATABASE_URL:-}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       DB_NAME: ${POSTGRES_DB:-Digital Invitation & Attendance Management}
+      PGHOST: ${PGHOST:-postgres}
+      PGPORT: ${PGPORT:-5432}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      PGDATABASE: ${POSTGRES_DB:-Digital Invitation & Attendance Management}
       JWT_SECRET: ${JWT_SECRET:-}
       SERVICE_BASE64_64_JWT_SECRET: ${SERVICE_BASE64_64_JWT_SECRET}
       SERVICE_BASE64_JWT_SECRET: ${SERVICE_BASE64_JWT_SECRET}
@@ -52,4 +58,5 @@ services:
 
 volumes:
   postgres_data:
+    name: ${POSTGRES_VOLUME_NAME:-digital_invitation_postgres_data}
   backend_uploads:

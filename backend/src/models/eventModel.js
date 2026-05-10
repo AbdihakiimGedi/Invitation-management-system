@@ -29,7 +29,7 @@ const EventModel = {
         FROM event_participants ep
         JOIN guests g ON ep.guest_ref_id = g.guest_id
         WHERE ep.event_id = $1 AND ep.status = $2 
-        AND ep.type_id = (SELECT id FROM people_types WHERE type_name = 'Guests' LIMIT 1)
+        AND ep.type_id = (SELECT id FROM people_types WHERE type_name = 'Guest' LIMIT 1)
       `;
       const result = await db.query(query, [eventId, status]);
       return result.rows;
@@ -51,7 +51,7 @@ const EventModel = {
       LEFT JOIN faculties f ON s.faculty_id = f.faculty_id
       LEFT JOIN departments d ON s.department_id = d.department_id
       WHERE ep.event_id = $1 AND ep.status = $2
-      AND ep.type_id = (SELECT id FROM people_types WHERE type_name IN ('Graduates', 'Students') LIMIT 1)
+      AND ep.type_id = (SELECT id FROM people_types WHERE type_name = 'Graduate' LIMIT 1)
     `;
     const result = await db.query(query, [eventId, status]);
     return result.rows;

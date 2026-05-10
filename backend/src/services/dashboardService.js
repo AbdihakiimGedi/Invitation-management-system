@@ -12,8 +12,8 @@ const DashboardService = {
       db.query(`
         SELECT
           (SELECT COUNT(*)::int FROM event_participants ep JOIN people_types pt ON pt.id = ep.type_id WHERE pt.table_name = 'students') AS graduates,
-          (SELECT COUNT(*)::int FROM event_participants ep JOIN people_types pt ON pt.id = ep.type_id WHERE pt.type_name = 'Guests') AS guests,
-          (SELECT COUNT(*)::int FROM event_participants ep JOIN people_types pt ON pt.id = ep.type_id WHERE pt.type_name = 'VIP Guests') AS vip_guests,
+          (SELECT COUNT(*)::int FROM event_participants ep JOIN people_types pt ON pt.id = ep.type_id WHERE pt.type_name = 'Guest') AS guests,
+          (SELECT COUNT(*)::int FROM event_participants ep JOIN people_types pt ON pt.id = ep.type_id WHERE pt.type_name = 'VIP Guest') AS vip_guests,
           (SELECT COUNT(*)::int FROM event_participants) AS total_participants,
           (SELECT COUNT(*)::int FROM events) AS total_events,
           (SELECT COUNT(*)::int FROM events WHERE event_date >= CURRENT_TIMESTAMP) AS active_events,

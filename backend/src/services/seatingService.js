@@ -14,7 +14,7 @@ const SeatingService = {
         JOIN graduates g ON ep.user_id = g.student_id
         WHERE ep.event_id::text = $1::text
         AND ep.status = 'eligible'
-        AND ep.type_id = (SELECT id FROM people_types WHERE type_name IN ('Graduates', 'Students') LIMIT 1)
+        AND ep.type_id = (SELECT id FROM people_types WHERE type_name = 'Graduate' LIMIT 1)
         ORDER BY 
           CASE 
             WHEN g.degree_level = 'PhD' THEN 1

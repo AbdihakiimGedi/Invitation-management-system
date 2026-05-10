@@ -41,6 +41,12 @@
           }
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Digital Invitation to use the camera for attendance QR scanning."
+        }
+      ],
       "@react-native-community/datetimepicker",
       "./plugins/withAndroidCleartextTraffic"
     ],
