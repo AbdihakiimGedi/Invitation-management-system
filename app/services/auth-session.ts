@@ -8,7 +8,14 @@ export type AuthUser = {
 };
 
 export async function saveAuthSession(token: string | undefined, user: AuthUser | undefined) {
-  if (token) await AsyncStorage.setItem('authToken', token);
+  await AsyncStorage.multiRemove(['authToken', 'authUser', 'portalSession']);
+
+  const cleanToken = typeof token === 'string' ? token.trim() : '';
+  if (!cleanToken) {
+    throw new Error('Login response did not include an authentication token.');
+  }
+
+  await AsyncStorage.setItem('authToken', cleanToken);
   if (user) await AsyncStorage.setItem('authUser', JSON.stringify(user));
 }
 

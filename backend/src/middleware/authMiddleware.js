@@ -15,7 +15,10 @@ const authMiddleware = (req, res, next) => {
       return res.status(401).json({ error: 'Authentication token is required' });
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication token is required' });
+    }
 
     // Verify token
     const decoded = jwt.verify(token, jwtSecret, {
@@ -31,6 +34,11 @@ const authMiddleware = (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error('Token validation error:', {
+      name: error.name,
+      message: error.message,
+    });
+
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token has expired' });
     }

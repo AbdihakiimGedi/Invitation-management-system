@@ -1,5 +1,5 @@
 import { saveAuthSession } from '@/services/auth-session';
-import Constants from 'expo-constants';
+import { getApiBaseUrl } from '@/services/admin-api';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -36,10 +36,6 @@ type RoleRoute =
   | '/qr-scanner';
 
 const REQUEST_TIMEOUT_MS = 12000;
-
-function getApiBaseUrl() {
-  return "http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io";
-}
 
 const API_BASE_URL = getApiBaseUrl();
 

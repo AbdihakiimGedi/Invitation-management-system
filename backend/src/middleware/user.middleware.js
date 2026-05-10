@@ -14,7 +14,11 @@ const userMiddleware = (req, res, next) => {
       return res.status(401).json({ error: 'Authorization header missing or invalid' });
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    if (!token) {
+      return res.status(401).json({ error: 'Authorization header missing or invalid' });
+    }
+
     const decoded = jwt.verify(token, jwtSecret);
     
     // Attach decoded user info (id, role) to request
@@ -22,6 +26,11 @@ const userMiddleware = (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error('Token validation error:', {
+      name: error.name,
+      message: error.message,
+    });
+
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token expired' });
     }
