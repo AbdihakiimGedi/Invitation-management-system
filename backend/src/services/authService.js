@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const UserModel = require('../models/userModel');
 const ActivityLogService = require('./activityLogService');
+const { getJwtSecret, getJwtSecretStatus } = require('../config/jwtSecret');
 
 const getRedirectPath = (role) => {
   const paths = {
@@ -16,7 +17,9 @@ const getRedirectPath = (role) => {
 
 const AuthService = {
   async login(username, password) {
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+    const jwtSecret = getJwtSecret();
+    if (!jwtSecret) {
+      console.error('Authentication secret is missing or too short:', getJwtSecretStatus());
       throw new Error('Authentication is not configured securely');
     }
 
@@ -44,7 +47,7 @@ const AuthService = {
       role: user.role,
     };
 
-    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+    const token = jwt.sign(tokenPayload, jwtSecret, {
       expiresIn: process.env.JWT_EXPIRES_IN || '8h',
       algorithm: 'HS256',
     });

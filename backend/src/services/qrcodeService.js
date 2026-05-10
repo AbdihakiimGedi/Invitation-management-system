@@ -1,5 +1,6 @@
 const QRCode = require('qrcode');
 const crypto = require('crypto');
+const { getJwtSecret } = require('../config/jwtSecret');
 
 const QRCodeService = {
   /**
@@ -31,7 +32,12 @@ const QRCodeService = {
    * Generates a security hash for the QR data to prevent tampering
    */
   generateSecurityHash(data) {
-    return crypto.createHmac('sha256', process.env.JWT_SECRET)
+    const jwtSecret = getJwtSecret();
+    if (!jwtSecret) {
+      throw new Error('Authentication is not configured securely');
+    }
+
+    return crypto.createHmac('sha256', jwtSecret)
       .update(data)
       .digest('hex');
   }

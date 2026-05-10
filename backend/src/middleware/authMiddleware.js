@@ -1,9 +1,11 @@
 const jwt = require('jsonwebtoken');
+const { getJwtSecret, getJwtSecretStatus } = require('../config/jwtSecret');
 
 const authMiddleware = (req, res, next) => {
   try {
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-      console.error('JWT_SECRET is missing or too short.');
+    const jwtSecret = getJwtSecret();
+    if (!jwtSecret) {
+      console.error('Authentication secret is missing or too short:', getJwtSecretStatus());
       return res.status(500).json({ error: 'Authentication is not configured securely' });
     }
 
@@ -16,7 +18,7 @@ const authMiddleware = (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+    const decoded = jwt.verify(token, jwtSecret, {
       algorithms: ['HS256'],
     });
 
