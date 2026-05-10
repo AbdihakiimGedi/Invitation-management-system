@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const SeatController = require('../../controllers/seatController');
+const authMiddleware = require('../../middleware/authMiddleware');
+const roleMiddleware = require('../../middleware/roleMiddleware');
+
+router.use(authMiddleware);
+router.use(roleMiddleware(['Admin']));
 
 // Seat Groups
 router.post('/seat-groups', SeatController.createGroup);

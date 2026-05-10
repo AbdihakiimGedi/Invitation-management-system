@@ -5,7 +5,14 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   const location = useLocation();
   const token = localStorage.getItem('token');
   const storedUser = localStorage.getItem('user');
-  const user = storedUser ? JSON.parse(storedUser) : null;
+  let user = null;
+
+  try {
+    user = storedUser ? JSON.parse(storedUser) : null;
+  } catch {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  }
 
   if (!token || !user) {
     // Redirect to login if not authenticated

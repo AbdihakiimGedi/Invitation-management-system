@@ -627,12 +627,12 @@ const PeopleService = {
           VALUES ($1, $2, $3, $4, $5, $6, $7)
           ON CONFLICT (student_id) 
           DO UPDATE SET
-            full_name = EXCLUDED.full_name,
-            department_id = EXCLUDED.department_id,
-            faculty_id = EXCLUDED.faculty_id,
-            phone = EXCLUDED.phone,
-            email = EXCLUDED.email,
-            gpa = EXCLUDED.gpa
+            full_name = COALESCE(students.full_name, EXCLUDED.full_name),
+            department_id = COALESCE(students.department_id, EXCLUDED.department_id),
+            faculty_id = COALESCE(students.faculty_id, EXCLUDED.faculty_id),
+            phone = COALESCE(students.phone, EXCLUDED.phone),
+            email = COALESCE(students.email, EXCLUDED.email),
+            gpa = COALESCE(students.gpa, EXCLUDED.gpa)
           RETURNING (xmax = 0) AS is_new
         `, [studentId, name, dId, fId, phone, email, gpa || null]);
 
@@ -906,18 +906,48 @@ const PeopleService = {
         throw new Error('Participant is already assigned to the target event.');
       }
 
-      // 3. Perform atomic update
-      const updateRes = await client.query(
-        'UPDATE event_participants SET event_id = $1 WHERE user_id = $2 AND event_id = $3 RETURNING *',
-        [targetEventId, userId, sourceEventId]
+      // 3. Preserve the source event row and create a separate target-event assignment.
+      // Invitations and attendance records reference eventparticipant_id, so changing
+      // event_id in-place would move history away from the original event.
+      const sourceRes = await client.query(
+        'SELECT * FROM event_participants WHERE user_id = $1 AND event_id = $2 LIMIT 1',
+        [userId, sourceEventId]
       );
 
-      if (updateRes.rowCount === 0) {
+      if (sourceRes.rowCount === 0) {
         throw new Error('Participant was not found in the source event.');
       }
 
+      const source = sourceRes.rows[0];
+      const insertRes = await client.query(`
+        INSERT INTO event_participants (
+          event_id,
+          user_id,
+          type_id,
+          status,
+          is_participating,
+          reason,
+          guest_ref_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING *
+      `, [
+        targetEventId,
+        source.user_id,
+        source.type_id,
+        source.status,
+        source.is_participating,
+        source.reason,
+        source.guest_ref_id
+      ]);
+
       await client.query('COMMIT');
-      return { success: true, targetEventName: targetEvent.event_name };
+      return {
+        success: true,
+        targetEventName: targetEvent.event_name,
+        preservedSourceEventId: sourceEventId,
+        eventParticipant: insertRes.rows[0]
+      };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

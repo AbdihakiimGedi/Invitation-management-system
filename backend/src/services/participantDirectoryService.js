@@ -46,7 +46,7 @@ const ParticipantDirectoryService = {
 
   async generatePassword(typeSlug, eventId, eventParticipantId) {
     const { type, participant } = await this.getParticipantDetails(typeSlug, eventId, eventParticipantId);
-    const password = String(crypto.randomInt(0, 10000)).padStart(4, '0');
+    const password = crypto.randomBytes(9).toString('base64url');
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await ParticipantDirectoryModel.upsertCredentialWithPassword({
       username: participant.username,

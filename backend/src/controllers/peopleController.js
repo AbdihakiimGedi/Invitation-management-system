@@ -105,7 +105,7 @@ const PeopleController = {
       const headers = await PeopleService.getFileHeaders(req.file.path);
       return sendSuccess(res, { headers, filePath: req.file.path }, 'File parsed successfully');
     } catch (error) {
-      return sendError(res, 'Failed to parse file headers', 500);
+      return sendError(res, error.message || 'Failed to parse file headers', error.message?.includes('Only CSV') ? 400 : 500);
     }
   },
 

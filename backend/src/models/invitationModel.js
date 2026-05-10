@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const InvitationManagementService = require('../services/invitationManagementService');
+const AttendanceService = require('../services/attendanceService');
 
 const loginUsernameSql = `
   CASE
@@ -118,6 +119,7 @@ const InvitationModel = {
   },
 
   async getForUser(userId) {
+    await AttendanceService.ensureSchema();
     const activeEventFilterSql = await getActiveEventFilterSql();
     const query = `
       SELECT
@@ -129,6 +131,8 @@ const InvitationModel = {
         i.status,
         i.comm_status,
         i.created_at,
+        COALESCE(ar.attendance_status, 'NOT_ATTENDED') AS attendance_status,
+        ar.scanned_at AS attended_at,
         e.event_name,
         e.event_date,
         e.location,
@@ -151,6 +155,8 @@ const InvitationModel = {
           'seat_number', se.seat_number,
           'category_type', se.category_type,
           'communication_status', i.comm_status,
+          'attendance_status', COALESCE(ar.attendance_status, 'NOT_ATTENDED'),
+          'attended_at', ar.scanned_at,
           'quantity', i.quantity
         )) AS metadata
       FROM users u
@@ -161,6 +167,7 @@ const InvitationModel = {
       LEFT JOIN guests g ON pt.table_name = 'guests' AND g.guest_id = ep.guest_ref_id
       LEFT JOIN invitations i ON i.eventparticipant_id = ep.eventparticipant_id
       LEFT JOIN seats se ON se.id = i.seat_id
+      LEFT JOIN attendance_records ar ON ar.invitation_id = i.id
       WHERE u.id = $1
         AND u.username = (${loginUsernameSql})
         AND ep.status = 'eligible'
@@ -172,6 +179,7 @@ const InvitationModel = {
   },
 
   async getForUserById(userId, invitationId) {
+    await AttendanceService.ensureSchema();
     const activeEventFilterSql = await getActiveEventFilterSql();
     const query = `
       SELECT *
@@ -185,6 +193,8 @@ const InvitationModel = {
           i.status,
           i.comm_status,
           i.created_at,
+          COALESCE(ar.attendance_status, 'NOT_ATTENDED') AS attendance_status,
+          ar.scanned_at AS attended_at,
           e.event_name,
           e.event_date,
           e.location,
@@ -207,6 +217,8 @@ const InvitationModel = {
             'seat_number', se.seat_number,
             'category_type', se.category_type,
             'communication_status', i.comm_status,
+            'attendance_status', COALESCE(ar.attendance_status, 'NOT_ATTENDED'),
+            'attended_at', ar.scanned_at,
             'quantity', i.quantity
           )) AS metadata
         FROM users u
@@ -217,6 +229,7 @@ const InvitationModel = {
         LEFT JOIN guests g ON pt.table_name = 'guests' AND g.guest_id = ep.guest_ref_id
         LEFT JOIN invitations i ON i.eventparticipant_id = ep.eventparticipant_id
         LEFT JOIN seats se ON se.id = i.seat_id
+        LEFT JOIN attendance_records ar ON ar.invitation_id = i.id
         WHERE u.id = $1
           AND u.username = (${loginUsernameSql})
           AND ep.status = 'eligible'
@@ -256,6 +269,7 @@ const InvitationModel = {
   },
 
   async getForUserByEvent(userId, eventId) {
+    await AttendanceService.ensureSchema();
     const activeEventFilterSql = await getActiveEventFilterSql();
     const query = `
       SELECT
@@ -267,6 +281,8 @@ const InvitationModel = {
         i.status,
         i.comm_status,
         i.created_at,
+        COALESCE(ar.attendance_status, 'NOT_ATTENDED') AS attendance_status,
+        ar.scanned_at AS attended_at,
         e.event_name,
         e.event_date,
         e.location,
@@ -289,6 +305,8 @@ const InvitationModel = {
           'seat_number', se.seat_number,
           'category_type', se.category_type,
           'communication_status', i.comm_status,
+          'attendance_status', COALESCE(ar.attendance_status, 'NOT_ATTENDED'),
+          'attended_at', ar.scanned_at,
           'quantity', i.quantity
         )) AS metadata
       FROM users u
@@ -299,6 +317,7 @@ const InvitationModel = {
       LEFT JOIN guests g ON pt.table_name = 'guests' AND g.guest_id = ep.guest_ref_id
       LEFT JOIN invitations i ON i.eventparticipant_id = ep.eventparticipant_id
       LEFT JOIN seats se ON se.id = i.seat_id
+      LEFT JOIN attendance_records ar ON ar.invitation_id = i.id
       WHERE u.id = $1
         AND u.username = (${loginUsernameSql})
         AND ep.event_id = $2

@@ -23,8 +23,32 @@ const storage = multer.diskStorage({
     cb(null, 'import-' + Date.now() + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage: storage });
+const allowedMimeTypes = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'text/csv',
+  'application/csv'
+]);
+const allowedExtensions = new Set(['.xlsx', '.xls', '.csv']);
+const upload = multer({
+  storage,
+  limits: { fileSize: Number(process.env.UPLOAD_MAX_BYTES || 5 * 1024 * 1024) },
+  fileFilter(req, file, cb) {
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!allowedExtensions.has(ext) || !allowedMimeTypes.has(file.mimetype)) {
+      return cb(new Error('Only CSV and Excel files are allowed'));
+    }
+    return cb(null, true);
+  }
+});
 
+function handleUpload(req, res, next) {
+  upload.single('file')(req, res, (error) => {
+    if (!error) return next();
+    const status = error.code === 'LIMIT_FILE_SIZE' || error.message.includes('Only CSV') ? 400 : 500;
+    return res.status(status).json({ error: error.message });
+  });
+}
 
 // Admin-only routes
 router.get('/types', authMiddleware, roleMiddleware(['Admin']), PeopleController.listTypes);
@@ -33,7 +57,7 @@ router.get('/departments/by-faculty/:facultyId', authMiddleware, roleMiddleware(
 router.get('/columns/:tableName', authMiddleware, roleMiddleware(['Admin']), PeopleController.listColumns);
 router.get('/schema/:tableName', authMiddleware, roleMiddleware(['Admin']), PeopleController.getMappingSchema);
 router.get('/preview', authMiddleware, roleMiddleware(['Admin']), PeopleController.searchPreview);
-router.post('/upload-preview', authMiddleware, roleMiddleware(['Admin']), upload.single('file'), PeopleController.uploadPreview);
+router.post('/upload-preview', authMiddleware, roleMiddleware(['Admin']), handleUpload, PeopleController.uploadPreview);
 router.post('/import', authMiddleware, roleMiddleware(['Admin']), PeopleController.processImport);
 router.post('/manual-register', authMiddleware, roleMiddleware(['Admin']), PeopleController.manualRegister);
 router.post('/process-participation', authMiddleware, roleMiddleware(['Admin']), PeopleController.finalizeParticipation);

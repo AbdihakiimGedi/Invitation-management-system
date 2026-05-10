@@ -4,6 +4,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api
 
 const api = axios.create({
   baseURL: BASE_URL,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -18,13 +19,27 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+    return Promise.reject(error);
+  }
+);
+
+const getError = (error) =>
+  error.response?.data || { error: error.message || 'Request failed. Please try again.' };
+
 export const authService = {
   login: async (username, password) => {
     try {
       const response = await api.post('/auth/login', { username, password });
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      throw getError(error);
     }
   }
 };
@@ -72,10 +87,10 @@ export const eventModelService = {
   },
   getParticipants: async (id, status = 'eligible', type = 'graduate') => {
     try {
-      const response = await api.get(`/events/${id}/participants?status=${status}&type=${type}`);
+      const response = await api.get(`/events/${id}/participants`, { params: { status, type } });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      throw getError(error);
     }
   },
   getAvailableTransferEvents: async (excludeId) => {

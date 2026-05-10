@@ -16,10 +16,15 @@ const getRedirectPath = (role) => {
 
 const AuthService = {
   async login(username, password) {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+      throw new Error('Authentication is not configured securely');
+    }
+
     // 1. Find user by username
-    const user = await UserModel.findByUsername(username);
+    const cleanUsername = String(username || '').trim();
+    const user = await UserModel.findByUsername(cleanUsername);
     if (!user) {
-      throw new Error('User not found');
+      throw new Error('Invalid username or password');
     }
 
     // 2. Check if user is active
@@ -40,7 +45,8 @@ const AuthService = {
     };
 
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES_IN,
+      expiresIn: process.env.JWT_EXPIRES_IN || '8h',
+      algorithm: 'HS256',
     });
 
     // 5. Return user info (safe data only) and token

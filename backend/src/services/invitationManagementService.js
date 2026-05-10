@@ -52,6 +52,9 @@ const InvitationManagementService = {
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invitation_requests_event_status ON invitation_requests(event_id, status)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invitation_requests_requester ON invitation_requests(requester_user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invitation_deliveries_event ON invitation_deliveries(event_id)');
   },
 
   async getCapacity(eventId, client = db) {
@@ -389,9 +392,10 @@ const InvitationManagementService = {
       const invitationId = invitationResult.rows[0].id;
 
       const username = `GUEST-${guest.guest_id}`;
-      const password = String(crypto.randomInt(0, 10000)).padStart(4, '0');
+      const password = crypto.randomBytes(9).toString('base64url');
       const passwordHash = await bcrypt.hash(password, 10);
-      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS generated_password VARCHAR(4)');
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS generated_password VARCHAR(150)');
+      await client.query('ALTER TABLE users ALTER COLUMN generated_password TYPE VARCHAR(150)');
       await client.query(`
         INSERT INTO users (id, username, password_hash, generated_password, role, is_active)
         VALUES (gen_random_uuid(), $1, $2, $3, 'Guest', TRUE)

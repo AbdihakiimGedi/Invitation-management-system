@@ -2,8 +2,10 @@ const express = require('express');
 const InvitationController = require('../../controllers/invitationController');
 const authMiddleware = require('../../middleware/authMiddleware');
 const roleMiddleware = require('../../middleware/roleMiddleware');
+const rateLimit = require('../../middleware/rateLimitMiddleware');
 
 const router = express.Router();
+const participantRoles = ['Graduate', 'Guest', 'Special Guest'];
 
 
 
@@ -18,16 +20,26 @@ router.get('/management/requests/:requestId', authMiddleware, roleMiddleware(['A
 router.post('/management/requests/:requestId/approve', authMiddleware, roleMiddleware(['Admin']), InvitationController.approveMoreInvitationRequest);
 
 // Authenticated participant portal
-router.get('/my-events', authMiddleware, InvitationController.getMyEvents);
-router.get('/my-events/:eventId/invitation', authMiddleware, InvitationController.getMyEventInvitation);
-router.get('/my-invitations', authMiddleware, InvitationController.getMyInvitations);
-router.get('/my-invitations/:invitationId', authMiddleware, InvitationController.getMyInvitation);
-router.post('/requests', authMiddleware, InvitationController.createMoreInvitationRequest);
+router.get('/my-events', authMiddleware, roleMiddleware(participantRoles), InvitationController.getMyEvents);
+router.get('/my-events/:eventId/invitation', authMiddleware, roleMiddleware(participantRoles), InvitationController.getMyEventInvitation);
+router.get('/my-invitations', authMiddleware, roleMiddleware(participantRoles), InvitationController.getMyInvitations);
+router.get('/my-invitations/:invitationId', authMiddleware, roleMiddleware(participantRoles), InvitationController.getMyInvitation);
+router.post(
+  '/requests',
+  authMiddleware,
+  roleMiddleware(['Graduate']),
+  rateLimit({ windowMs: 60 * 60_000, max: 12, keyPrefix: 'invitation-request' }),
+  InvitationController.createMoreInvitationRequest
+);
 
 // Admin only: Seating Integration
 router.post('/seats', authMiddleware, roleMiddleware(['Admin']), InvitationController.initializeEventSeating);
 
 // Entry Verification (Public or Specific Auth)
-router.post('/verify', InvitationController.verifyInvitation);
+router.post(
+  '/verify',
+  rateLimit({ windowMs: 60_000, max: 60, keyPrefix: 'invitation-verify' }),
+  InvitationController.verifyInvitation
+);
 
 module.exports = router;

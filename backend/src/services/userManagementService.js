@@ -4,6 +4,7 @@ const db = require('../config/database');
 const ActivityLogService = require('./activityLogService');
 
 const allowedSort = new Set(['created_at', 'username', 'role', 'is_active', 'full_name', 'email']);
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const UserManagementService = {
   async ensureSchema(client = db) {
@@ -111,8 +112,26 @@ const UserManagementService = {
       await this.ensureSchema(client);
       await this.validateRole(data.role, client);
 
-      if (!data.username || !data.role) {
+      const username = String(data.username || '').trim();
+      const email = data.email ? String(data.email).trim() : null;
+
+      if (!username || !data.role) {
         const error = new Error('Username and role are required');
+        error.statusCode = 400;
+        throw error;
+      }
+      if (username.length < 3 || username.length > 100) {
+        const error = new Error('Username must be between 3 and 100 characters');
+        error.statusCode = 400;
+        throw error;
+      }
+      if (email && !emailPattern.test(email)) {
+        const error = new Error('A valid email address is required');
+        error.statusCode = 400;
+        throw error;
+      }
+      if (data.password && String(data.password).length < 8) {
+        const error = new Error('Password must be at least 8 characters');
         error.statusCode = 400;
         throw error;
       }
@@ -134,14 +153,14 @@ const UserManagementService = {
         VALUES (gen_random_uuid(), $1, $2, $3, $4, COALESCE($5, TRUE), $6, $7, $8)
         RETURNING id, username, role, is_active, full_name, email, phone, created_at
       `, [
-        data.username.trim(),
+        username,
         passwordHash,
         password,
         data.role,
         data.is_active,
         data.full_name || null,
-        data.email || null,
-        data.phone || null
+        email,
+        data.phone ? String(data.phone).trim() : null
       ]);
 
       await ActivityLogService.log({
@@ -174,6 +193,12 @@ const UserManagementService = {
       await client.query('BEGIN');
       await this.ensureSchema(client);
       if (data.role) await this.validateRole(data.role, client);
+      const email = data.email ? String(data.email).trim() : null;
+      if (email && !emailPattern.test(email)) {
+        const error = new Error('A valid email address is required');
+        error.statusCode = 400;
+        throw error;
+      }
 
       const result = await client.query(`
         UPDATE users
@@ -187,9 +212,9 @@ const UserManagementService = {
         WHERE id = $6
         RETURNING id, username, role, is_active, full_name, email, phone, created_at, updated_at
       `, [
-        data.full_name ?? null,
-        data.email ?? null,
-        data.phone ?? null,
+        data.full_name ? String(data.full_name).trim() : null,
+        email,
+        data.phone ? String(data.phone).trim() : null,
         data.role ?? null,
         data.is_active ?? null,
         userId

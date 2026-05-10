@@ -67,7 +67,8 @@ const ParticipantDirectoryModel = {
   },
 
   async ensureCredentialDisplayColumn() {
-    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS generated_password VARCHAR(4)');
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS generated_password VARCHAR(150)');
+    await db.query('ALTER TABLE users ALTER COLUMN generated_password TYPE VARCHAR(150)');
   },
 
   async getTypeBySlug(typeSlug) {
@@ -390,21 +391,25 @@ const ParticipantDirectoryModel = {
             ]
           );
 
-          await this.updateColumnReferenceIfExists(client, 'student_status', 'student_id', nextStudentId, current.student_id);
-          await this.updateColumnReferenceIfExists(client, 'invitations', 'student_id', nextStudentId, current.student_id);
-          await this.updateColumnReferenceIfExists(client, 'parents_guests', 'student_id', nextStudentId, current.student_id);
           await client.query(
             'UPDATE event_participants SET user_id = $1 WHERE eventparticipant_id = $2 AND event_id = $3',
             [nextStudentId, eventParticipantId, eventId]
           );
-          await client.query(
-            'UPDATE users SET username = $1 WHERE username = $2',
-            [nextStudentId, current.username]
+
+          const historicalRefs = await client.query(
+            'SELECT 1 FROM event_participants WHERE user_id = $1 AND NOT (eventparticipant_id = $2 AND event_id = $3) LIMIT 1',
+            [current.student_id, eventParticipantId, eventId]
           );
-          await client.query(
-            'DELETE FROM students WHERE student_id = $1',
-            [current.student_id]
-          );
+
+          if (historicalRefs.rowCount === 0) {
+            await this.updateColumnReferenceIfExists(client, 'student_status', 'student_id', nextStudentId, current.student_id);
+            await this.updateColumnReferenceIfExists(client, 'invitations', 'student_id', nextStudentId, current.student_id);
+            await this.updateColumnReferenceIfExists(client, 'parents_guests', 'student_id', nextStudentId, current.student_id);
+            await client.query(
+              'UPDATE users SET username = $1 WHERE username = $2',
+              [nextStudentId, current.username]
+            );
+          }
         } else {
           const setClauses = [];
           const params = [];

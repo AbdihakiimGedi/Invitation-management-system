@@ -35,6 +35,9 @@ const AttendanceService = {
         UNIQUE (event_id, participant_id)
       )
     `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_attendance_records_event_scanned_at ON attendance_records(event_id, scanned_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invitations_qr_token ON invitations(qr_token)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invitations_event_participant ON invitations(event_id, eventparticipant_id)');
   },
 
   async listActiveEvents() {
@@ -117,12 +120,18 @@ const AttendanceService = {
 
   async validateScan(eventId, qrToken) {
     await this.ensureSchema();
-    if (!eventId || !qrToken) {
+    const cleanToken = String(qrToken || '').trim();
+    if (!eventId || !cleanToken) {
       const error = new Error('Event and QR code are required');
       error.statusCode = 400;
       throw error;
     }
-    return this.findInvitationForScan(eventId, qrToken.trim());
+    if (cleanToken.length > 500) {
+      const error = new Error('Invalid Invitation QR Code');
+      error.statusCode = 400;
+      throw error;
+    }
+    return this.findInvitationForScan(eventId, cleanToken);
   },
 
   async confirmAttendance(eventId, qrToken, scannedBy) {
@@ -131,7 +140,13 @@ const AttendanceService = {
     try {
       await client.query('BEGIN');
       await this.ensureSchema(client);
-      const invitation = await this.findInvitationForScan(eventId, qrToken.trim(), client);
+      const cleanToken = String(qrToken || '').trim();
+      if (!eventId || !cleanToken || cleanToken.length > 500) {
+        const error = new Error('Event and QR code are required');
+        error.statusCode = 400;
+        throw error;
+      }
+      const invitation = await this.findInvitationForScan(eventId, cleanToken, client);
 
       const insertResult = await client.query(`
         INSERT INTO attendance_records (
