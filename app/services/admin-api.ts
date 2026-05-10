@@ -1,34 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-const BACKEND_PORT = 5000;
 const REQUEST_TIMEOUT_MS = 15000;
 
 export type ApiRecord = Record<string, unknown>;
 
-function getExpoLanHost() {
-  const expoConfigHost = (Constants.expoConfig as { hostUri?: string } | null)?.hostUri;
-  const manifestHost = (Constants.manifest as { debuggerHost?: string } | null)?.debuggerHost;
-  const hostUri = expoConfigHost || manifestHost;
-
-  return hostUri?.split(':')[0];
-}
-
 export function getApiBaseUrl() {
-  const configuredUrl =
-    Constants.expoConfig?.extra?.apiBaseUrl ?? process.env.EXPO_PUBLIC_API_BASE_URL;
-
-  if (typeof configuredUrl === 'string' && configuredUrl.trim()) {
-    return configuredUrl.trim().replace(/\/$/, '');
-  }
-
-  const lanHost = getExpoLanHost();
-
-  if (lanHost && lanHost !== 'localhost' && lanHost !== '127.0.0.1') {
-    return `http://${lanHost}:${BACKEND_PORT}`;
-  }
-
-  return `http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io`;
+  return "http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io";
 }
 
 function buildQuery(params?: ApiRecord) {
