@@ -2,6 +2,7 @@ const app = require('./app');
 const db = require('./config/database');
 const logger = require('./utils/logger');
 const InvitationService = require('./services/invitationService');
+const { runMigrations } = require('./scripts/autoMigrate');
 
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -9,9 +10,12 @@ const HOST = process.env.HOST || '0.0.0.0';
 // Test DB Connection and Start Server
 const startServer = async () => {
   try {
-    // Try a simple query to ensure DB is reachable
+    // Test DB Connection
     await db.query('SELECT NOW()');
     logger.info('Database connected successfully');
+
+    // Run schema migrations (idempotent — safe on every startup)
+    await runMigrations();
 
     // Start Background Workers
     InvitationService.startWorker();
