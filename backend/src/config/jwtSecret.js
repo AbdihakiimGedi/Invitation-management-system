@@ -1,4 +1,4 @@
-const JWT_SECRET_MIN_LENGTH = 32;
+const JWT_SECRET_MIN_LENGTH = 16;
 
 const getJwtSecret = () => {
   const secret = process.env.JWT_SECRET
