@@ -38,8 +38,6 @@ services:
       UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-5242880}
     volumes:
       - backend_uploads:/app/uploads
-    ports:
-      - "${BACKEND_PUBLIC_PORT:-5001}:5000"
 
   frontend:
     build:
@@ -49,8 +47,6 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    ports:
-      - "${FRONTEND_PUBLIC_PORT:-3000}:80"
 
 volumes:
   postgres_data:
