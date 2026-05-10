@@ -121,7 +121,7 @@ Recommended Coolify setup:
 
 1. Connect the GitHub repository.
 2. Use Docker Compose deployment.
-3. Set environment variables from `.env.example`. `JWT_SECRET` can be set manually, or Coolify can generate `SERVICE_BASE64_64_JWT_SECRET` from the compose file automatically.
+3. Set environment variables from `.env.example`. Coolify will generate `SERVICE_BASE64_64_JWT_SECRET` from the compose file and pass it to the backend as `JWT_SECRET`.
 4. Route frontend domain to the `frontend` service on port `80`.
 5. Route backend/API domain to the `backend` service on port `5000`.
 6. Set `CORS_ORIGIN` to the production frontend URL.
