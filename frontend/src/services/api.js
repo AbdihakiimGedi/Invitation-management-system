@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io/api/v1';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io/api/v1';
 
 const api = axios.create({
   baseURL: BASE_URL,

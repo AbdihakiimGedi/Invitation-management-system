@@ -128,6 +128,21 @@ Recommended Coolify setup:
 7. Set `VITE_API_BASE_URL` to `https://your-backend-domain/api/v1`.
 8. Set `EXPO_PUBLIC_API_BASE_URL` to `https://your-backend-domain` before building the mobile app.
 
+### HTTPS for Mobile APKs
+
+Android production builds require a trusted HTTPS certificate. In Coolify, the backend domain must be configured with a real Let's Encrypt certificate, not Traefik's default certificate.
+
+For the backend service:
+
+1. Open the `backend` service in Coolify.
+2. Set the public domain to `https://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io`.
+3. Set the exposed service port to `5000`.
+4. Enable automatic HTTPS / Let's Encrypt.
+5. Enable HTTP to HTTPS redirect.
+6. Redeploy the application.
+
+After redeploy, `https://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io/health` must open with a trusted browser lock icon before rebuilding the APK.
+
 ## GitHub Hygiene
 
 Do not commit:

@@ -20,6 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true,
       "package": "com.abdihakiin.app"
     },
     "web": {
@@ -40,13 +41,15 @@
           }
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "./plugins/withAndroidCleartextTraffic"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
+      "apiBaseUrl": "http://kk0g84k04ow0cgs8owsckgwg.38.242.148.212.sslip.io",
       "router": {},
       "eas": {
         "projectId": "ab2a7a61-00a7-461a-944a-9231aa8e7b45"
